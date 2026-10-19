@@ -18,7 +18,7 @@ You build your own icons ("auras") with a simple step-by-step window: choose an 
 - **Where and for whom**: only in combat, out of combat, mounted, in a vehicle, and for chosen specializations. Optionally keep the icon for a few seconds after combat.
 - **Look**: any icon from the game, any size (width and height), an optional glow or pulse, a display priority when icons overlap, and three eye-catching effects (Sunburst, Flame, Burst) for empowered abilities.
 - **Place it exactly**: drag it with the mouse, or type the X and Y position.
-- **Many auras**: keep as many as you want, hide the ones you do not need now (without deleting them) and bring them back later.
+- **Many auras**: keep as many as you want, deactivate the ones you do not need now (without deleting them) and activate them again later.
 
 HeadsUp works within the rules of the current game: it never reads hidden values in a way the game forbids.
 
@@ -30,13 +30,13 @@ HeadsUp works within the rules of the current game: it never reads hidden values
 
 ## Use
 
-- Type `/headsup` to open the window.
+- Type `/headsup` to open the window, or click the **HeadsUp button on the minimap** (drag it to move it; `/headsup minimap` hides or shows it). It is also in the add-on menu of the minimap.
 - Step 1 **Aura**: ability, name, icon, size, position, look.
-  Step 2 **Conditions**: health, enemy, resources.
+  Step 2 **Status**: health, enemy, resources.
   Step 3 **Ability**: availability, cooldown, charges, empowered.
   Step 4 **Situation**: where and for whom it shows.
 - Press **Save aura**. Drag the icon where you want it (or type its position).
-- Hover over any option for a short explanation. Right-click an aura in the list for more (rename, edit, hide, delete).
+- Hover over any option for a short explanation. Right-click an aura in the list for more (rename, edit, duplicate, deactivate, delete).
 
 ## Feedback
 

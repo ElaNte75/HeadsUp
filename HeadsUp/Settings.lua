@@ -277,6 +277,7 @@ local function Choice(key, list, default, extra)
                     onClick = function()
                         d[key] = o.value
                         UI.Changed()
+                        if extra and extra.onPick then extra.onPick(o.value) end
                     end,
                 }
             end
@@ -334,7 +335,8 @@ headerLine:SetPoint("BOTTOMRIGHT")
 headerLine:SetHeight(1)
 headerLine:SetColorTexture(unpack(C.border))
 
-local VERSION = "1.0 beta"   -- also in HeadsUp.toc
+-- the version is the one of HeadsUp.toc (set by "HeadsUp Ship.bat": major.minor.week and a word like beta)
+local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("HeadsUp", "Version") or "1.0 beta"
 -- where the players are asked to send their feedback: the CurseForge page of the addon.
 -- (It works once the project exists with the name HeadsUp on CurseForge: change the address if it differs.)
 local FEEDBACK_URL = "https://www.curseforge.com/wow/addons/headsup"
@@ -991,6 +993,70 @@ local function BuildAbilityPage(page)
             tt:AddLine("The Situation card still applies: where it shows (combat, mounted...), for which specializations, and the hide time after a cast.", 0.7, 0.7, 0.7, true)
         end,
     })
+
+    -- A sound the moment the icon appears. It is an option of Empowered: the lighting up of the ability is one of the
+    -- few things the game lets the addon read in combat. The game hides health, the main resource, cooldown and
+    -- charges, so with those conditions the addon cannot know when the icon shows (unless the second icon of
+    -- "Ignore the other conditions" does it).
+    local function hiddenConditions(d)
+        local names = {}
+        if d.healthEnabled then names[#names + 1] = "your health" end
+        if d.enemyEnabled then names[#names + 1] = "enemy health" end
+        if d.powerEnabled then names[#names + 1] = "the main resource" end
+        local _, hasCooldown = Facts(d)
+        if d.availEnabled and hasCooldown then names[#names + 1] = "available (this ability has a cooldown)" end
+        if d.cdEnabled then names[#names + 1] = "cooldown" end
+        if d.chargesEnabled then names[#names + 1] = "charges" end
+        return names
+    end
+    local function overrides(d) return d.buffEnabled and d.buffAlways and d.buffState ~= "gone" end
+    local function soundUsable(d)
+        if not (HasAbility(d) and d.buffEnabled and d.buffState ~= "gone") then return false end
+        return (overrides(d) or #hiddenConditions(d) == 0) and true or false
+    end
+    local soundList = {}
+    for _, item in ipairs(HeadsUpSounds) do soundList[#soundList + 1] = { value = item.key, text = item.text } end
+
+    empowered:Condition({
+        label = "Play a sound when it shows",
+        key = "soundEnabled",
+        indent = true,
+        usable = soundUsable,
+        tip = function(tt, d)
+            tt:AddLine("Play a sound when it shows", 1, 0.82, 0)
+            tt:AddLine("A short sound the moment the icon appears because the ability is empowered. Choose the sound in the list: it plays once so you can hear it.", 1, 1, 1, true)
+            tt:AddLine(" ")
+            tt:AddLine("With \"Ignore the other conditions\" it sounds whenever the ability lights up. Without it, it works only if the other conditions can be read in combat (the second resource, the enemy alive, \"available\" for an ability without a cooldown).", 0.7, 0.7, 0.7, true)
+            if d and d.buffEnabled and d.buffState ~= "gone" then
+                local names = hiddenConditions(d)
+                if #names > 0 and not overrides(d) then
+                    tt:AddLine(" ")
+                    tt:AddLine("Not available now: the game hides " .. table.concat(names, ", ") .. " in combat. Tick \"Ignore the other conditions\", or remove them.", 1, 0.5, 0.5, true)
+                end
+            end
+        end,
+        controls = { Choice("soundKey", soundList, "ding", {
+            onPick = function(key)
+                local d = HeadsUp_GetDraft()
+                HeadsUp_PlaySound(key, d and d.soundVolume or 2)
+            end,
+        }) },
+    })
+    empowered:Field({
+        label = "Sound volume",
+        usable = function(d) return soundUsable(d) and d.soundEnabled end,
+        tip = Tip("Sound volume", "Soft, normal or loud. Our own sounds have a file for each level. The sounds of the game (Game: ...) have no volume, so a higher level plays them two or three times at once.", "The overall volume still follows the Master volume of the game."),
+        controls = { Choice("soundVolume", {
+            { value = 1, text = "Soft" },
+            { value = 2, text = "Normal" },
+            { value = 3, text = "Loud" },
+        }, 2, {
+            onPick = function(volume)
+                local d = HeadsUp_GetDraft()
+                if d then HeadsUp_PlaySound(d.soundKey, volume) end
+            end,
+        }) },
+    })
 end
 
 ------------------------------------------------------------
@@ -1087,6 +1153,7 @@ local function BuildSituationPage(page)
             },
         },
     })
+
 end
 
 ------------------------------------------------------------
@@ -1095,7 +1162,7 @@ end
 local STEPS = {
     { label = "Aura", build = BuildAuraPage,
         tip = "What the aura is: the ability, its name, the picture, the size, the place on the screen and the look." },
-    { label = "Conditions", build = BuildConditionsPage,
+    { label = "Status", build = BuildConditionsPage,
         tip = "When it shows, part 1: your health, the enemy's health, your resources." },
     { label = "Ability", build = BuildAbilityPage,
         tip = "When it shows, part 2: whether the ability is available, its cooldown and charges, and whether it is empowered." },
@@ -1280,7 +1347,9 @@ local LIST_TOP = 44
 local rows = {}
 -- the list has two parts that scroll on their own: the active auras, and (under a line) the hidden ones
 local activeOffset, hiddenOffset = 0, 0
-local HIDDEN_SHARE = 0.4   -- the hidden part never takes more than this share of the list
+local HIDDEN_SHARE = 0.4   -- the inactive part never takes more than this share of the list
+local listBars = {}        -- the thin scroll bars of the two parts (made below)
+local listState = {}       -- what RefreshList last showed: how many rows each part has and how many fit
 
 local function VisibleRows()
     local room = frame:GetHeight() - HEADER_H - LIST_TOP - 14   -- (the help is in the tooltip of each row)
@@ -1308,7 +1377,11 @@ local function AuraMenu(row)
             Refresh()
             RefreshList()
         end },
-        { text = a.hidden and "Show" or "Hide", onClick = function()
+        { text = "Duplicate", onClick = function()
+            HeadsUp_DuplicateAura(index)
+            RefreshList()
+        end },
+        { text = a.hidden and "Activate" or "Deactivate", onClick = function()
             HeadsUp_SetHidden(index, not a.hidden)
             RefreshList()
         end },
@@ -1366,9 +1439,9 @@ local function GetRow(n)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(a and a.name or "Aura", 1, 1, 1)
         if a and a.hidden then
-            GameTooltip:AddLine("Hidden: it does not show in the game.", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine("Inactive: it does not show in the game.", 0.8, 0.8, 0.8, true)
         end
-        GameTooltip:AddLine("Right-click for more: rename, edit, " .. ((a and a.hidden) and "show" or "hide") .. ", delete.", 1, 0.82, 0, true)
+        GameTooltip:AddLine("Right-click for more: rename, edit, duplicate, " .. ((a and a.hidden) and "activate" or "deactivate") .. ", delete.", 1, 0.82, 0, true)
         GameTooltip:AddLine("Click: show it on screen, to move it. Shift+click: show several at once.", 0.7, 0.7, 0.7, true)
         GameTooltip:Show()
     end)
@@ -1410,6 +1483,43 @@ listPanel:SetScript("OnMouseWheel", function(_, delta)
     RefreshList()
 end)
 
+-- a thin scroll bar for one part of the list ("active" or "hidden"): it moves the offset of that part
+local function MakeListBar(which)
+    local function offsetSetter(value)
+        if which == "active" then activeOffset = value else hiddenOffset = value end
+    end
+    return UI.ScrollBar(listPanel, {
+        state = function()
+            local info = listState[which]
+            if not info or info.total <= info.slots or info.slots <= 0 then return false end
+            return true, info.slots / info.total, info.offset / (info.total - info.slots)
+        end,
+        setPosition = function(position)
+            local info = listState[which]
+            if info and info.total > info.slots then
+                offsetSetter(math.floor(position * (info.total - info.slots) + 0.5))
+                RefreshList()
+            end
+        end,
+        page = function(direction)
+            local info = listState[which]
+            if info then
+                offsetSetter(info.offset + direction * info.slots)
+                RefreshList()
+            end
+        end,
+        wheel = function(delta)
+            local info = listState[which]
+            if info then
+                offsetSetter(info.offset - delta)
+                RefreshList()
+            end
+        end,
+    })
+end
+listBars.active = MakeListBar("active")
+listBars.hidden = MakeListBar("hidden")
+
 -- one row of the list shows one aura
 local function ShowAuraRow(row, i, section)
     local auras = HeadsUp_GetAuras()
@@ -1449,7 +1559,7 @@ local function ShowHeaderRow(row, count)
     row.text:ClearAllPoints()
     row.text:SetPoint("LEFT", row, "LEFT", 4, -3)
     row.text:SetPoint("RIGHT", row, "RIGHT", -4, -3)
-    row.text:SetText("Hidden (" .. count .. ")")
+    row.text:SetText("Inactive (" .. count .. ")")
     row.text:SetTextColor(unpack(C.muted))
     row:Show()
 end
@@ -1491,6 +1601,19 @@ function RefreshList()
     end
     for m = n + 1, #rows do rows[m]:Hide() end
     emptyText:SetShown(#active == 0 and #hidden == 0)
+
+    -- the scroll bars: each one beside its own part of the list, only when that part has more than it can show
+    local shownActive = math.min(#active, activeSlots)
+    listState.active = { total = #active, slots = activeSlots, offset = activeOffset }
+    listState.hidden = { total = #hidden, slots = hiddenSlots, offset = hiddenOffset }
+    listBars.active:ClearAllPoints()
+    listBars.active:SetPoint("TOPRIGHT", listPanel, "TOPRIGHT", -2, -LIST_TOP)
+    listBars.active:SetHeight(math.max(1, shownActive * ROW_HEIGHT))
+    listBars.hidden:ClearAllPoints()
+    listBars.hidden:SetPoint("TOPRIGHT", listPanel, "TOPRIGHT", -2, -(LIST_TOP + (shownActive + 1) * ROW_HEIGHT))
+    listBars.hidden:SetHeight(math.max(1, hiddenSlots * ROW_HEIGHT))
+    listBars.active:Refresh()
+    listBars.hidden:Refresh()
 end
 
 ------------------------------------------------------------

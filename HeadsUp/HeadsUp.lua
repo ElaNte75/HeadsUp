@@ -41,7 +41,7 @@ local EFFECT_STRATA = { "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN" }
 -- How small the icon gets during "Pulse" (1 = not at all).
 local PULSE_SHRINK = 0.92
 
-local KEYS = { "class", "specs", "name", "hidden", "spellID", "healthEnabled", "healthOp", "healthPct", "enemyEnabled", "enemyOp", "enemyPct", "cdEnabled", "cdState", "chargesEnabled", "chargesState", "enemyAliveEnabled", "enemyAlive", "buffEnabled", "buffID", "buffState", "suppressEnabled", "suppressSeconds", "effect", "icon", "showWhenEnabled", "showRules", "lingerEnabled", "lingerSeconds", "layer", "availEnabled", "pos", "width", "height", "sizeLinked", "powerEnabled", "powerOp", "powerValue", "secEnabled", "secOp", "secValue", "buffAlways", "empowerFx" }
+local KEYS = { "class", "specs", "name", "hidden", "spellID", "healthEnabled", "healthOp", "healthPct", "enemyEnabled", "enemyOp", "enemyPct", "cdEnabled", "cdState", "chargesEnabled", "chargesState", "enemyAliveEnabled", "enemyAlive", "buffEnabled", "buffID", "buffState", "suppressEnabled", "suppressSeconds", "effect", "icon", "showWhenEnabled", "showRules", "lingerEnabled", "lingerSeconds", "layer", "availEnabled", "pos", "width", "height", "sizeLinked", "powerEnabled", "powerOp", "powerValue", "secEnabled", "secOp", "secValue", "buffAlways", "empowerFx", "soundEnabled", "soundKey", "soundVolume" }
 
 local auras = {}        -- saved list (HeadsUpDB.auras)
 local pool = {}         -- pool[i] = indicator for auras[i]
@@ -51,6 +51,60 @@ local currentSpec     -- id of the specialization being played (Blood, Frost, ..
 local function RefreshCurrentSpec()
     local index = GetSpecialization()
     currentSpec = index and (GetSpecializationInfo(index)) or nil
+end
+
+-- The sounds for "Play a sound when it shows". file = our own sounds (HeadsUp/Sounds, made by
+-- tools/make_sounds.py: three files for each, 1 = soft, 2 = normal, 3 = loud). id = a sound of the game
+-- (ids of its sound kits, from its own code); the game has no volume for those, so a louder level
+-- plays the same sound two or three times at once.
+HeadsUpSounds = {
+    { key = "ding", text = "Ding", file = "ding" },
+    { key = "dingdong", text = "Ding-dong", file = "dingdong" },
+    { key = "double", text = "Double ding", file = "double" },
+    { key = "chime", text = "Chime", file = "chime" },
+    { key = "ping", text = "Ping", file = "ping" },
+    { key = "gong", text = "Gong", file = "gong" },
+    { key = "bell", text = "Game: Alarm bell", id = 12889 },
+    { key = "bell2", text = "Game: Alarm bell 2", id = 12867 },
+    { key = "warning", text = "Game: Raid warning", id = 8959 },
+    { key = "auction", text = "Game: Auction bell", id = 5274 },
+    { key = "auction2", text = "Game: Auction bell 2", id = 5275 },
+    { key = "ready", text = "Game: Ready check", id = 8960 },
+    { key = "role", text = "Game: Role check", id = 17317 },
+    { key = "alert", text = "Game: Alert", id = 15273 },
+}
+
+-- every sound that is played is written to HeadsUpDB.soundLog (the answer of the game: did it play?),
+-- so that a silent sound can be examined from the log file
+local function LogSound(text)
+    if not HeadsUpDB then return end
+    local list = HeadsUpDB.soundLog or {}
+    HeadsUpDB.soundLog = list
+    list[#list + 1] = date("%H:%M:%S ") .. text
+    while #list > 20 do table.remove(list, 1) end
+end
+
+-- volume: 1 = soft, 2 = normal, 3 = loud
+function HeadsUp_PlaySound(key, volume)
+    volume = math.max(1, math.min(3, volume or 2))
+    for _, sound in ipairs(HeadsUpSounds) do
+        if sound.key == key then
+            if sound.file then
+                local path = "Interface\\AddOns\\HeadsUp\\Sounds\\" .. sound.file .. "_" .. volume .. ".ogg"
+                local ok, willPlay, handle = pcall(PlaySoundFile, path, "Master")
+                LogSound(key .. " file " .. path .. " -> " .. tostring(ok) .. " willPlay=" .. tostring(willPlay)
+                    .. " handle=" .. tostring(handle))
+            else
+                for n = 1, volume do
+                    local ok, willPlay, handle = pcall(PlaySound, sound.id, "Master")
+                    LogSound(key .. " game id " .. sound.id .. " #" .. n .. " -> " .. tostring(ok)
+                        .. " willPlay=" .. tostring(willPlay) .. " handle=" .. tostring(handle))
+                end
+            end
+            return
+        end
+    end
+    LogSound("unknown sound " .. tostring(key))
 end
 
 local errorShown = false
@@ -88,6 +142,9 @@ local function NewConfig()
         buffEnabled = false,
         buffID = nil,            -- the buff chosen by the player (for the label; the glow is checked)
         buffState = "active",    -- "active" = the ability is lit up, "gone" = it is not
+        soundEnabled = false,    -- play a sound when the aura shows (only when its conditions can be known) ...
+        soundKey = "ding",       -- ... this one (see HeadsUpSounds) ...
+        soundVolume = 2,         -- ... 1 = soft, 2 = normal, 3 = loud
         empowerFx = "sunburst",  -- the effect shown while the icon is on because its ability is empowered:
                                  -- "sunburst", "flame" or "burst" (there is always one)
         buffAlways = false,      -- with "Empowered: active": also show it whenever it is lit up, ignoring the other
@@ -754,6 +811,103 @@ end
 
 -- Switch the "Empowered effect" of a face on or off. Turning it on plays the one-time flash of the
 -- styles that have one (the moment it is empowered).
+-- Does the ability have a cooldown of its own (or several charges)? These are fixed facts of the spell.
+-- If the game does not tell us, we assume yes.
+local function AbilityHasCooldown(spellID)
+    local hasCooldown, maxCharges = true, 1
+    local charges = C_Spell.GetSpellCharges(spellID)
+    local most = charges and charges.maxCharges
+    if most and not issecretvalue(most) and most > 1 then maxCharges = most end
+    local baseCooldown = C_Spell.GetSpellBaseCooldown or GetSpellBaseCooldown
+    if baseCooldown then
+        local ok, ms = pcall(baseCooldown, spellID)
+        if ok and type(ms) == "number" and not issecretvalue(ms) then
+            hasCooldown = ms > 0 or maxCharges > 1
+        end
+    end
+    return hasCooldown
+end
+
+-- Sound when the aura shows. The addon cannot know whether the icon is visible when it depends on values the game
+-- hides in combat (health, the main resource, cooldown, charges, "available"). So the sound is only made
+-- for conditions that can be read: the ability lighting up, the second resource, the enemy alive, the
+-- "Show it only" rules. With "Ignore the other conditions" it sounds when the ability lights up.
+-- ("The ability is available" can be read when the ability has no cooldown of its own: the game does
+-- tell whether there is enough resource to use it. With a cooldown it cannot be known.)
+local function HasHiddenCondition(cfg, ind)
+    return cfg.healthEnabled or cfg.enemyEnabled or cfg.powerEnabled or cfg.cdEnabled or cfg.chargesEnabled
+        or (cfg.availEnabled and ind.hasCooldown ~= false)
+end
+
+-- true: the aura shows now. false: it does not. nil: it cannot be known (no sound).
+local function SoundConditionsMet(cfg, ind)
+    local overrides = cfg.buffEnabled and cfg.buffAlways and cfg.buffState ~= "gone"
+    local hidden = HasHiddenCondition(cfg, ind)
+    if hidden and not overrides then return nil end
+    if not ShowRulesAllow(cfg, ind) then return false end
+    if cfg.suppressEnabled and ind.suppressUntil and GetTime() < ind.suppressUntil then return false end
+    local lit = false
+    if cfg.buffEnabled then
+        local okL, isLit = pcall(function()
+            return C_SpellActivationOverlay.IsSpellOverlayed(cfg.spellID) and true or false
+        end)
+        lit = okL and isLit
+    end
+    if overrides then
+        if lit then return true end     -- the second icon shows, whatever the other conditions say
+        if hidden then return false end -- the other way to show needs conditions that cannot be read
+    elseif cfg.buffEnabled and lit ~= (cfg.buffState ~= "gone") then
+        return false
+    end
+    if cfg.availEnabled then   -- (only here when the ability has no cooldown): enough resource to use it?
+        local okU, usable = pcall(C_Spell.IsSpellUsable, cfg.spellID)
+        if not okU or issecretvalue(usable) or not usable then return false end
+    end
+    local lingering = cfg.lingerEnabled and not inCombat and ind.lingerUntil and GetTime() < ind.lingerUntil
+    if cfg.enemyAliveEnabled and not lingering then
+        local met = false
+        if UnitExists("target") and UnitCanAttack("player", "target") then
+            local okDead, dead = pcall(UnitIsDead, "target")
+            if okDead and not issecretvalue(dead) then
+                met = (cfg.enemyAlive == "no") == (dead and true or false)
+            end
+        end
+        if not met then return false end
+    end
+    if cfg.secEnabled and ind.secType then
+        local count = SecondaryCount(ind.secType)
+        if count == nil or not Compare(count, cfg.secOp, cfg.secValue or 1) then return false end
+    end
+    return true
+end
+
+-- plays the sound the moment the aura starts to show (not again and again while it shows)
+local function UpdateSound(ind)
+    local cfg = ind.cfg
+    if not cfg or not cfg.soundEnabled or not cfg.spellID or cfg.class ~= playerClass or cfg.hidden
+        or (cfg.specs and not cfg.specs[currentSpec]) or ind.editing or ind.preview or ind.dragging then
+        ind.soundOn = nil
+        return
+    end
+    local met = SoundConditionsMet(cfg, ind)
+    if met == nil then
+        ind.soundOn = nil
+        return
+    end
+    if ind.soundOn == nil then   -- the first look (login, reload, closing the window): quiet
+        ind.soundOn = met
+        return
+    end
+    if met and not ind.soundOn then
+        local now = GetTime()
+        if not ind.lastSound or now - ind.lastSound > 0.5 then
+            ind.lastSound = now
+            HeadsUp_PlaySound(cfg.soundKey, cfg.soundVolume)
+        end
+    end
+    ind.soundOn = met
+end
+
 local function SetFx(face, on)
     face.fx:SetAlpha(on and 1 or 0)
     if on and not face.fxOn then face.fx:Trigger() end
@@ -765,7 +919,7 @@ local function ResetFx(ind)
     ind.faces[2].fxOn = false
 end
 
-function Update(ind)
+local function UpdateVisual(ind)
     local cfg = ind.cfg
     local A, C, E, F, G, H, J = ind.A, ind.C, ind.E, ind.F, ind.G, ind.H, ind.J
     local M, P, S = ind.M, ind.P, ind.S
@@ -934,6 +1088,11 @@ function Update(ind)
     end
 end
 
+function Update(ind)
+    UpdateVisual(ind)
+    UpdateSound(ind)
+end
+
 -- Rebuild everything that depends on the aura's settings.
 local function ApplyConfig(ind)
     local cfg = ind.cfg
@@ -993,6 +1152,12 @@ local function ApplyConfig(ind)
     end
     if resources.secondary then
         ind.secType = resources.secondary.type
+    end
+
+    if cfg.spellID then
+        ind.hasCooldown = AbilityHasCooldown(cfg.spellID)   -- (false must stay false)
+    else
+        ind.hasCooldown = nil
     end
 
     ind.powerType = nil
@@ -1259,6 +1424,21 @@ function HeadsUp_SetHidden(index, hidden)
     ApplyConfig(GetPooled(index))
 end
 
+-- Make an exact copy of a saved aura (same settings, same place). It gets a free name ("Death Strike 2")
+-- and is active, even if the original is hidden. Returns the index of the copy.
+function HeadsUp_DuplicateAura(index)
+    local source = auras[index]
+    if not source then return nil end
+    local copy = CopyConfig(source)
+    copy.hidden = nil
+    copy.name = UniqueName(source.name or SpellName(source.spellID) or "Aura", nil)
+    auras[#auras + 1] = copy
+    local ind = GetPooled(#auras)
+    ind.cfg = copy
+    ApplyConfig(ind)
+    return #auras
+end
+
 -- Delete a saved aura. Returns true if it was the aura being edited.
 function HeadsUp_DeleteAura(index)
     if not auras[index] then return false end
@@ -1483,6 +1663,21 @@ local function OnEvent(_, event, arg1, arg2, arg3)
                 a.height = a.size or 50
             end
             a.size = nil
+            -- a sound that is no longer in the list becomes the default one
+            -- the sound was first an option of "Empowered" (buffSound...): now it belongs to the whole aura
+            if a.buffSound ~= nil then
+                if a.soundEnabled == nil then
+                    a.soundEnabled = a.buffSound
+                    a.soundKey = a.buffSoundKey
+                    a.soundVolume = a.buffSoundVolume
+                end
+                a.buffSound, a.buffSoundKey, a.buffSoundVolume = nil, nil, nil
+            end
+            local known = false
+            for _, sound in ipairs(HeadsUpSounds) do
+                if sound.key == a.soundKey then known = true end
+            end
+            if not known then a.soundKey = "ding" end
             FillDefaults(a)
             local ind = GetPooled(i)
             ind.cfg = a
@@ -1533,15 +1728,65 @@ driver:SetScript("OnEvent", OnEvent)
 
 -- A cooldown running out fires no event, so auras with a cooldown condition are
 -- re-checked a few times a second.
+-- A silent probe: once a second while in combat it asks the game for a few values and counts, in
+-- HeadsUpDB.probe, whether each one is readable or hidden ("secret") in combat. It writes nothing
+-- in the chat. It tells us what the addon may use for sounds and conditions.
+local sinceProbe = 0
+local function Probe()
+    if not HeadsUpDB then return end
+    local stats = HeadsUpDB.probe or {}
+    HeadsUpDB.probe = stats
+    local function check(name, fn, ...)
+        local ok, value = pcall(fn, ...)
+        local kind = (not ok and "error") or (value == nil and "nil") or (issecretvalue(value) and "secret") or "readable"
+        local key = "combat_" .. name .. "_" .. kind
+        stats[key] = (stats[key] or 0) + 1
+    end
+    check("UnitHealth_player", UnitHealth, "player")
+    check("UnitHealthMax_player", UnitHealthMax, "player")
+    check("UnitPower_player_main", function() return UnitPower("player") end)
+    check("UnitPowerMax_player_main", function() return UnitPowerMax("player") end)
+    if UnitExists("target") then
+        check("UnitHealth_target", UnitHealth, "target")
+    end
+    local spellID
+    for _, a in ipairs(auras) do
+        if a.class == playerClass and a.spellID then spellID = a.spellID break end
+    end
+    if spellID then
+        check("cooldown_duration", function()
+            local cd = C_Spell.GetSpellCooldown(spellID)
+            return cd and cd.duration
+        end)
+        check("cooldown_start", function()
+            local cd = C_Spell.GetSpellCooldown(spellID)
+            return cd and cd.startTime
+        end)
+        check("charges_current", function()
+            local ch = C_Spell.GetSpellCharges(spellID)
+            return ch and ch.currentCharges
+        end)
+        check("IsSpellUsable", function() return (C_Spell.IsSpellUsable(spellID)) end)
+        check("IsSpellOverlayed", function() return C_SpellActivationOverlay.IsSpellOverlayed(spellID) end)
+    end
+end
+
 local sinceCheck = 0
 driver:SetScript("OnUpdate", function(_, elapsed)
+    if inCombat then
+        sinceProbe = sinceProbe + elapsed
+        if sinceProbe >= 1 then
+            sinceProbe = 0
+            Probe()
+        end
+    end
     sinceCheck = sinceCheck + elapsed
     if sinceCheck < 0.1 then return end
     sinceCheck = 0
     ForEachIndicator(function(ind)
         local cfg = ind.cfg
         if cfg and (cfg.cdEnabled or cfg.chargesEnabled or cfg.suppressEnabled or cfg.buffEnabled
-            or cfg.lingerEnabled or cfg.availEnabled or cfg.secEnabled)
+            or cfg.lingerEnabled or cfg.availEnabled or cfg.secEnabled or cfg.soundEnabled)
             and ind.A:IsShown() then
             Update(ind)
         end
@@ -1562,9 +1807,36 @@ function HeadsUp_Why()
     while #history > 30 do table.remove(history, 1) end
     HeadsUpDB.why = history
 end
+-- /headsup soundtest : plays four sounds, two seconds apart, to find out which ones are heard:
+--   1 a sound of the game, 2 a sound file of another addon (GTFO, if it is installed),
+--   3 and 4 two of our own files. The answer of the game is written to HeadsUpDB.soundLog (nothing in the chat).
+function HeadsUp_SoundTest()
+    local tests = {
+        { "1 game sound 12889", function() return PlaySound(12889, "Master") end },
+        { "2 GTFO file", function() return PlaySoundFile("Interface\\AddOns\\GTFO\\Sounds\\alarmbeep.ogg", "Master") end },
+        { "3 our ding_3", function() return PlaySoundFile("Interface\\AddOns\\HeadsUp\\Sounds\\ding_3.ogg", "Master") end },
+        { "4 our chime_3", function() return PlaySoundFile("Interface\\AddOns\\HeadsUp\\Sounds\\chime_3.ogg", "Master") end },
+    }
+    for i, test in ipairs(tests) do
+        C_Timer.After((i - 1) * 2.5, function()
+            local ok, willPlay, handle = pcall(test[2])
+            LogSound("soundtest " .. test[1] .. " -> " .. tostring(ok) .. " willPlay=" .. tostring(willPlay)
+                .. " handle=" .. tostring(handle))
+        end)
+    end
+end
+
 SLASH_HEADSUP1 = "/headsup"
 SlashCmdList.HEADSUP = function(msg)
-    if msg == "why" then HeadsUp_Why() else HeadsUp_ToggleSettings() end
+    if msg == "why" then
+        HeadsUp_Why()
+    elseif msg == "soundtest" then
+        HeadsUp_SoundTest()
+    elseif msg == "minimap" then
+        if HeadsUp_ToggleMinimapButton then HeadsUp_ToggleMinimapButton() end
+    else
+        HeadsUp_ToggleSettings()
+    end
 end
 
 print("|cffff8800HeadsUp|r loaded")

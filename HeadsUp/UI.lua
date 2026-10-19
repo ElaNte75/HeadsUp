@@ -655,6 +655,98 @@ function CardMethods:Note(def)
     end }
 end
 
+-- A thin scroll bar of ours (dark and thin; orange and a little wider under the mouse). It is placed by the
+-- caller (SetPoint on the returned frame). opts:
+--   state()           -> shown (bool), size of the handle (0..1 of the line), position (0..1)
+--   setPosition(p)    the handle was dragged to p (0..1)
+--   page(direction)   a click on the line above (-1) or below (1) the handle
+--   wheel(delta)      the mouse wheel on the line
+-- Call bar:Refresh() whenever the state changed.
+function UI.ScrollBar(parent, opts)
+    local bar = CreateFrame("Frame", nil, parent)
+    bar:SetWidth(8)
+    bar:EnableMouse(true)
+    bar:Hide()
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetPoint("TOP")
+    track:SetPoint("BOTTOM")
+    track:SetWidth(1)
+    track:SetColorTexture(0.13, 0.15, 0.20, 1)   -- a thin, dark line
+    local thumb = CreateFrame("Button", nil, bar)
+    local THUMB_W, THUMB_W_HOVER = 3, 5
+    thumb:SetWidth(THUMB_W)
+    thumb:SetHeight(40)
+    local thumbBg = thumb:CreateTexture(nil, "ARTWORK")
+    thumbBg:SetAllPoints()
+    thumbBg:SetColorTexture(0.22, 0.25, 0.32, 1)   -- dark while it is not touched
+
+    local dragging, dragStartY, dragStartPosition = false, 0, 0
+    local currentPosition = 0
+
+    local function paintThumb(hot)
+        thumb:SetWidth(hot and THUMB_W_HOVER or THUMB_W)
+        if hot then
+            thumbBg:SetColorTexture(rgba(C.accent))
+        else
+            thumbBg:SetColorTexture(0.22, 0.25, 0.32, 1)
+        end
+    end
+
+    function bar:Refresh()
+        local shown, size, position = opts.state()
+        if not shown then
+            self:Hide()
+            return
+        end
+        self:Show()
+        local trackHeight = self:GetHeight()
+        local thumbHeight = math.max(28, math.min(trackHeight, trackHeight * size))
+        thumb:SetHeight(thumbHeight)
+        currentPosition = position or 0
+        thumb:ClearAllPoints()
+        thumb:SetPoint("TOP", self, "TOP", 0, -(trackHeight - thumbHeight) * currentPosition)
+    end
+
+    local function cursorY()
+        return (select(2, GetCursorPosition())) / UIParent:GetEffectiveScale()
+    end
+
+    thumb:SetScript("OnMouseDown", function()
+        dragging = true
+        dragStartY = cursorY()
+        dragStartPosition = currentPosition
+    end)
+    thumb:SetScript("OnMouseUp", function()
+        dragging = false
+        paintThumb(thumb:IsMouseOver())
+    end)
+    thumb:SetScript("OnEnter", function() paintThumb(true) end)
+    thumb:SetScript("OnLeave", function() if not dragging then paintThumb(false) end end)
+    thumb:SetScript("OnUpdate", function()
+        if not dragging then return end
+        if not IsMouseButtonDown("LeftButton") then
+            dragging = false
+            paintThumb(thumb:IsMouseOver())
+            return
+        end
+        local free = bar:GetHeight() - thumb:GetHeight()
+        if free > 0 then
+            opts.setPosition(clamp(dragStartPosition + (dragStartY - cursorY()) / free, 0, 1))
+            bar:Refresh()
+        end
+    end)
+    bar:SetScript("OnMouseDown", function()
+        opts.page(cursorY() > (thumb:GetTop() or 0) and -1 or 1)
+        bar:Refresh()
+    end)
+    bar:EnableMouseWheel(true)
+    bar:SetScript("OnMouseWheel", function(_, delta)
+        opts.wheel(delta)
+        bar:Refresh()
+    end)
+    return bar
+end
+
 function UI.NewPage(parent)
     local scroll = CreateFrame("ScrollFrame", nil, parent)
     scroll:SetAllPoints(parent)
@@ -667,6 +759,31 @@ function UI.NewPage(parent)
         self:SetVerticalScroll(clamp(self:GetVerticalScroll() - delta * 40, 0, range))
     end)
     scroll:Hide()
+
+    -- our own thin scroll bar on the right of the page (see UI.ScrollBar)
+    local function range() return scroll:GetVerticalScrollRange() or 0 end
+    local bar = UI.ScrollBar(parent, {
+        state = function()
+            local r = range()
+            if r <= 1 or not scroll:IsShown() then return false end
+            local view = scroll:GetHeight()
+            return true, view / (view + r), clamp(scroll:GetVerticalScroll() / r, 0, 1)
+        end,
+        setPosition = function(position) scroll:SetVerticalScroll(clamp(position, 0, 1) * range()) end,
+        page = function(direction)
+            scroll:SetVerticalScroll(clamp(scroll:GetVerticalScroll() + direction * scroll:GetHeight() * 0.9, 0, range()))
+        end,
+        wheel = function(delta) scroll:SetVerticalScroll(clamp(scroll:GetVerticalScroll() - delta * 40, 0, range())) end,
+    })
+    bar:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 16, 0)      -- the same place on every page
+    bar:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 16, 0)
+    scroll:SetScript("OnVerticalScroll", function() bar:Refresh() end)
+    scroll:SetScript("OnScrollRangeChanged", function() bar:Refresh() end)
+    scroll:HookScript("OnShow", function()
+        bar:Refresh()
+        C_Timer.After(0, function() bar:Refresh() end)   -- (the size of the page is known a moment later)
+    end)
+    scroll:HookScript("OnHide", function() bar:Hide() end)
 
     local page = { frame = scroll, child = child, y = 0 }
 
