@@ -388,7 +388,7 @@ local function UpdateFeedbackButton()
 end
 
 local feedbackPanel = UI.Box(frame, C.window, C.accent)
-feedbackPanel:SetSize(340, 206)
+feedbackPanel:SetSize(420, 196)
 feedbackPanel:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", -12, -6)
 feedbackPanel:SetFrameLevel(frame:GetFrameLevel() + 40)
 feedbackPanel:EnableMouse(true)
@@ -402,7 +402,7 @@ local feedbackBody = UI.Text(feedbackPanel, 12, C.text)
 feedbackBody:SetWordWrap(true)
 feedbackBody:SetJustifyV("TOP")
 feedbackBody:SetPoint("TOPLEFT", feedbackTitle, "BOTTOMLEFT", 0, -10)
-feedbackBody:SetWidth(308)
+feedbackBody:SetWidth(388)
 feedbackBody:SetText("HeadsUp is in beta, and your feedback is very important to us. Tell us what problem you ran into, what you need, or which ability did not work well, so that we can make it better.")
 
 local feedbackWhere = UI.Text(feedbackPanel, 11, C.muted)
@@ -410,15 +410,17 @@ feedbackWhere:SetPoint("BOTTOMLEFT", feedbackPanel, "BOTTOMLEFT", 16, 82)
 feedbackWhere:SetText("Leave a comment on our CurseForge page (click the address, Ctrl+C):")
 
 -- the address: it can be selected and copied, but not changed
-local feedbackAddress = UI.Input(feedbackPanel, 308, { maxLetters = 200 })
+local feedbackAddress = UI.Input(feedbackPanel, 388, { maxLetters = 200 })
 feedbackAddress:SetPoint("BOTTOMLEFT", feedbackPanel, "BOTTOMLEFT", 16, 54)
 feedbackAddress.edit:SetText(FEEDBACK_URL)
+feedbackAddress.edit:SetCursorPosition(0)   -- show the beginning of the address, not the end
 feedbackAddress.edit:SetScript("OnTextChanged", function(self, byPlayer)
     if byPlayer then
         self:SetText(FEEDBACK_URL)
         self:HighlightText()
     end
 end)
+feedbackPanel:SetScript("OnShow", function() feedbackAddress.edit:SetCursorPosition(0) end)
 feedbackAddress.edit:HookScript("OnEditFocusGained", function(self) self:HighlightText() end)
 feedbackAddress.edit:HookScript("OnMouseUp", function(self) self:HighlightText() end)
 
