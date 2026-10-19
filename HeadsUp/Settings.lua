@@ -335,7 +335,7 @@ headerLine:SetPoint("BOTTOMRIGHT")
 headerLine:SetHeight(1)
 headerLine:SetColorTexture(unpack(C.border))
 
--- the version is the one of HeadsUp.toc (set by "HeadsUp Ship.bat": major.minor.week and a word like beta)
+-- the version is the one written in HeadsUp.toc (by hand: for example "1.0 beta")
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("HeadsUp", "Version") or "1.0 beta"
 -- where the players are asked to send their feedback: the CurseForge page of the addon.
 -- (It works once the project exists with the name HeadsUp on CurseForge: change the address if it differs.)

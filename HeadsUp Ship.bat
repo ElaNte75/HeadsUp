@@ -3,7 +3,7 @@ title HeadsUp Ship
 cd /d "%~dp0"
 echo.
 echo HeadsUp Ship
-echo - Sets the version to the current week of the year (major.minor.week)
+echo - Uses the version written in HeadsUp.toc (it does not change it)
 echo - Creates HeadsUp-x.y.z.zip on the Desktop, with only the HeadsUp folder inside
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\ship.ps1"

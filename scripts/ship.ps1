@@ -1,14 +1,11 @@
 # HeadsUp ship script
-# 1) Sets the last number of the version in HeadsUp.toc to the current week of the year (ISO week)
-# 2) Builds Desktop\HeadsUp-<version>.zip with only the HeadsUp folder inside, ready for CurseForge
+# Builds Desktop\HeadsUp-<version>.zip with only the HeadsUp folder inside, ready for CurseForge.
 #
-# Version numbers are major.minor.week (like FarmWise): major and minor are never changed here.
-# The version may be followed by a word, for example "1.0.43 beta".
+# The version is the one written in HeadsUp.toc ("## Version: 1.0 beta"). It is changed by hand, when there is
+# a new version to publish. It is not changed here (no week number).
 
 [CmdletBinding()]
-param(
-    [switch]$SkipBump
-)
+param()
 
 $ErrorActionPreference = "Stop"
 
@@ -22,40 +19,11 @@ if (-not (Test-Path -LiteralPath $TocPath)) {
 $DesktopDir = [Environment]::GetFolderPath("Desktop")
 Write-Host "Addon: $AddonDir"
 
-# the ISO week of the year (Monday first, the week with the first Thursday is week 1)
-function Get-IsoWeek([datetime]$date) {
-    $day = [int]$date.DayOfWeek
-    if ($day -eq 0) { $day = 7 }
-    $thursday = $date.AddDays(4 - $day)
-    $calendar = [System.Globalization.CultureInfo]::InvariantCulture.Calendar
-    return $calendar.GetWeekOfYear($thursday, [System.Globalization.CalendarWeekRule]::FirstFourDayWeek, [DayOfWeek]::Monday)
-}
-
 $lines = Get-Content -LiteralPath $TocPath
 $versionLine = $lines | Where-Object { $_ -match '^##\s*Version\s*:' } | Select-Object -First 1
 if (-not $versionLine) { throw "No ## Version line in HeadsUp.toc" }
-$current = ($versionLine -split ":", 2)[1].Trim()
-
-if ($current -notmatch '^(\d+)\.(\d+)\.(\d+)(.*)$') {
-    throw "The version '$current' is not major.minor.week (optionally followed by a word like beta)"
-}
-$major = $Matches[1]
-$minor = $Matches[2]
-$suffix = $Matches[4]          # for example " beta"
-
-if ($SkipBump) {
-    $version = $current
-    Write-Host "Version left at $version"
-} else {
-    $week = Get-IsoWeek (Get-Date)
-    $version = "$major.$minor.$week$suffix"
-    $out = foreach ($line in $lines) {
-        if ($line -match '^##\s*Version\s*:') { "## Version: $version" } else { $line }
-    }
-    # (the toc is written without a byte order mark, with the same line ends as before)
-    [System.IO.File]::WriteAllText($TocPath, (($out -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
-    Write-Host "Version: $current  ->  $version  (week $week)"
-}
+$version = ($versionLine -split ":", 2)[1].Trim()
+Write-Host "Version: $version"
 
 # what goes into the zip: the HeadsUp folder, and nothing else
 $staging = Join-Path $env:TEMP ("HeadsUp-ship-" + [guid]::NewGuid().ToString("N"))
