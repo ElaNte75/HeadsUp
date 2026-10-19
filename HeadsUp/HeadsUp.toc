@@ -1,0 +1,11 @@
+## Interface: 120100
+## Title: HeadsUp
+## Notes: Shows the important "press this now" icon at the moment it matters, using conditions you set (health, resources, cooldowns, empowered abilities, combat state and more).
+## Author: ElaNte
+## Version: 1.0-beta
+## SavedVariables: HeadsUpDB
+
+HeadsUp.lua
+KnownGlows.lua
+UI.lua
+Settings.lua

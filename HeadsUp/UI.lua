@@ -1,0 +1,702 @@
+-- HeadsUp: interface toolkit.
+-- Our own look (no Blizzard frames or buttons), one set of sizes for everything.
+--
+-- The grid: every card is as wide as the page and has 6 columns. A control is 2 columns wide
+-- (a dropdown, a number box, a button: all the same size); a wide text field takes 3 (half the row). The label of a
+-- row takes the columns that are left. So every row of every page lines up the same way.
+--
+-- To add an option: add one Condition / Field line to a card in Settings.lua. Nothing here changes.
+
+local UI = {}
+HeadsUpUI = UI
+
+local FONT = STANDARD_TEXT_FONT
+
+------------------------------------------------------------
+-- look
+------------------------------------------------------------
+local C = {
+    window     = { 0.045, 0.052, 0.072, 0.98 },
+    panel      = { 0.070, 0.080, 0.108, 1 },
+    card       = { 0.095, 0.108, 0.143, 1 },
+    field      = { 0.043, 0.050, 0.068, 1 },
+    fieldHover = { 0.075, 0.085, 0.115, 1 },
+    popup      = { 0.060, 0.068, 0.092, 1 },
+    border     = { 0.200, 0.230, 0.300, 1 },
+    borderHi   = { 0.380, 0.430, 0.550, 1 },
+    accent     = { 1.000, 0.560, 0.120, 1 },
+    accentDim  = { 0.780, 0.420, 0.080, 1 },
+    text       = { 0.920, 0.930, 0.950, 1 },
+    muted      = { 0.580, 0.620, 0.700, 1 },
+    disabled   = { 0.360, 0.390, 0.450, 1 },
+    good       = { 0.350, 0.850, 0.450, 1 },
+    warn       = { 1.000, 0.500, 0.450, 1 },
+    gold       = { 1.000, 0.820, 0.000, 1 },
+}
+UI.C = C
+
+-- sizes (pixels)
+local L = {
+    COLS = 6,
+    COL_W = 64,       -- one column; the window and every control follow from it
+    GAP = 8,
+    CTRL_H = 22,      -- every control (dropdown, box, button, checkbox row) is this high
+    ROW_H = 28,       -- one row of a card
+    PAD = 14,         -- inside a card
+    TITLE_H = 34,     -- the title of a card and the line under it
+    CARD_GAP = 12,    -- between two cards
+}
+L.INNER_W = L.COLS * L.COL_W + (L.COLS - 1) * L.GAP
+L.PAGE_W = L.INNER_W + 2 * L.PAD
+UI.L = L
+
+local function clamp(v, lo, hi) return math.max(lo, math.min(hi, v)) end
+UI.Clamp = clamp
+
+local function rgba(c) return c[1], c[2], c[3], c[4] or 1 end
+
+local function colX(col) return L.PAD + (col - 1) * (L.COL_W + L.GAP) end
+local function spanW(span) return span * L.COL_W + (span - 1) * L.GAP end
+
+------------------------------------------------------------
+-- basic pieces
+------------------------------------------------------------
+function UI.Box(parent, bg, border, frameType, name)
+    local f = CreateFrame(frameType or "Frame", name, parent, "BackdropTemplate")
+    f:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    f:SetBackdropColor(rgba(bg))
+    f:SetBackdropBorderColor(rgba(border or C.border))
+    return f
+end
+
+function UI.Text(parent, size, color, justify)
+    local fs = parent:CreateFontString(nil, "OVERLAY")
+    fs:SetFont(FONT, size or 12, "")
+    local c = color or C.text
+    fs:SetTextColor(rgba(c))
+    fs:SetJustifyH(justify or "LEFT")
+    fs:SetWordWrap(false)
+    return fs
+end
+
+-- a small triangle pointing down, drawn with lines (no picture files needed)
+local function Chevron(parent)
+    local holder = CreateFrame("Frame", nil, parent)
+    holder:SetSize(9, 5)
+    holder.lines = {}
+    for i = 0, 4 do
+        local t = holder:CreateTexture(nil, "OVERLAY")
+        t:SetSize(9 - i * 2, 1)
+        t:SetPoint("TOP", holder, "TOP", 0, -i)
+        t:SetColorTexture(1, 1, 1, 1)
+        holder.lines[#holder.lines + 1] = t
+    end
+    function holder:SetColor(c)
+        for _, t in ipairs(self.lines) do t:SetVertexColor(c[1], c[2], c[3], 1) end
+    end
+    holder:SetColor(C.muted)
+    return holder
+end
+
+-- a tooltip: fill(tooltip, draft) writes its lines
+function UI.Tip(frame, fill)
+    frame:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        fill(GameTooltip, HeadsUp_GetDraft())
+        GameTooltip:Show()
+    end)
+    frame:HookScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+-- hover handling and a Paint() for anything that is clicked
+local function Interactive(b, paint)
+    b.Paint = paint
+    b:HookScript("OnEnter", function(self) self.hover = true; self:Paint() end)
+    b:HookScript("OnLeave", function(self) self.hover = false; self:Paint() end)
+    function b:SetOn(on)
+        self:SetEnabled(on and true or false)
+        self:Paint()
+    end
+end
+
+function UI.Button(parent, text, width, primary)
+    local b = UI.Box(parent, C.field, C.border, "Button")
+    b:SetSize(width, L.CTRL_H)
+    b.label = UI.Text(b, 12, C.text, "CENTER")
+    local inset = (width or 0) < 40 and 0 or 6   -- a very small button has no room for an edge
+    b.label:SetPoint("LEFT", inset, 0)
+    b.label:SetPoint("RIGHT", -inset, 0)
+    b.label:SetText(text or "")
+    Interactive(b, function(self)
+        local on, hov = self:IsEnabled(), self.hover
+        local bg, br, tx
+        if not on then
+            bg, br, tx = C.field, C.border, C.disabled
+        elseif self.primary then   -- the highlighted look (can be switched: button.primary = true / false)
+            bg, br, tx = hov and C.accent or C.accentDim, C.accent, C.text
+        else
+            bg, br, tx = hov and C.fieldHover or C.field, hov and C.borderHi or C.border, C.text
+        end
+        self:SetBackdropColor(rgba(bg))
+        self:SetBackdropBorderColor(rgba(br))
+        self.label:SetTextColor(rgba((on and self.textColor) or tx))   -- textColor: set by the owner
+    end)
+    b.primary = primary
+    b:Paint()
+    return b
+end
+
+-- a button with a small picture on its left
+function UI.IconButton(parent, width, text)
+    local b = UI.Button(parent, text, width)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetSize(16, 16)
+    b.icon:SetPoint("LEFT", 5, 0)
+    b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    b.label:ClearAllPoints()
+    b.label:SetPoint("LEFT", b.icon, "RIGHT", 6, 0)
+    b.label:SetPoint("RIGHT", -6, 0)
+    b.label:SetJustifyH("LEFT")
+    return b
+end
+
+-- a checkbox with its label to the right
+function UI.Check(parent, width, label)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(width, L.CTRL_H)
+    b.box = UI.Box(b, C.field, C.border)
+    b.box:SetSize(16, 16)
+    b.box:SetPoint("LEFT", 0, 0)
+    b.mark = b.box:CreateTexture(nil, "OVERLAY")
+    b.mark:SetSize(8, 8)
+    b.mark:SetPoint("CENTER")
+    b.mark:SetColorTexture(rgba(C.accent))
+    b.label = UI.Text(b, 12, C.text)
+    b.label:SetPoint("LEFT", b.box, "RIGHT", 8, 0)
+    b.label:SetPoint("RIGHT", b, "RIGHT", 0, 0)
+    b.label:SetText(label or "")
+    b.checked = false
+    Interactive(b, function(self)
+        local on, hov = self:IsEnabled(), self.hover
+        self.box:SetBackdropBorderColor(rgba((on and hov) and C.borderHi or C.border))
+        self.mark:SetColorTexture(rgba(on and C.accent or C.disabled))
+        self.label:SetTextColor(rgba(on and C.text or C.disabled))
+    end)
+    function b:SetValue(v)
+        self.checked = v and true or false
+        self.mark:SetShown(self.checked)
+    end
+    b:SetValue(false)
+    b:Paint()
+    return b
+end
+
+-- a number / text box
+local inputs = {}
+function UI.Input(parent, width, o)
+    o = o or {}
+    local box = UI.Box(parent, C.field, C.border)
+    box:SetSize(width, L.CTRL_H)
+    local eb = CreateFrame("EditBox", nil, box)
+    eb:SetFont(FONT, 12, "")
+    eb:SetTextColor(rgba(C.text))
+    eb:SetAutoFocus(false)
+    if o.numeric then eb:SetNumeric(true) end
+    eb:SetMaxLetters(o.maxLetters or 40)
+    eb:SetPoint("TOPLEFT", box, "TOPLEFT", 8, 0)
+    local rightInset = 8
+    if o.unit then
+        box.unit = UI.Text(box, 11, C.muted, "RIGHT")
+        box.unit:SetPoint("RIGHT", box, "RIGHT", -8, 0)
+        box.unit:SetText(o.unit)
+        rightInset = 16 + (box.unit:GetStringWidth() or 20)
+    end
+    eb:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -rightInset, 0)
+    eb:SetScript("OnEditFocusGained", function() box:SetBackdropBorderColor(rgba(C.accent)) end)
+    eb:SetScript("OnEditFocusLost", function(self)
+        box:SetBackdropBorderColor(rgba(C.border))
+        if o.commit then o.commit(self) end
+    end)
+    eb:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    eb:SetScript("OnEscapePressed", function(self)
+        if o.revert then o.revert(self) end
+        self:ClearFocus()
+    end)
+    box.edit = eb
+    function box:SetOn(on)
+        eb:SetEnabled(on and true or false)
+        self:SetAlpha(on and 1 or 0.45)
+    end
+    inputs[#inputs + 1] = eb
+    return box
+end
+
+function UI.ClearFocus()
+    for _, eb in ipairs(inputs) do
+        if eb:HasFocus() then eb:ClearFocus() end
+    end
+end
+
+------------------------------------------------------------
+-- the popup list (dropdowns and menus)
+------------------------------------------------------------
+-- An item: { text, icon, selected = function() -> bool (draws a box; nil = no box), disabled,
+--            keepOpen (stay open after the click), onClick = function() }
+local MAXV, ITEM_H = 12, 22
+local popup, blocker
+
+local function renderPopup()
+    local items = popup.items
+    local n = #items
+    local visible = math.min(n, MAXV)
+    popup.offset = clamp(popup.offset, 0, math.max(0, n - visible))
+    popup:SetHeight(visible * ITEM_H + 8)
+    for i = 1, MAXV do
+        local r = popup.rows[i]
+        local item = items[popup.offset + i]
+        if i <= visible and item then
+            r.item = item
+            local x = 8
+            local isSel = item.selected and item.selected() or false
+            if item.selected then
+                r.mark:Show()
+                r.mark:ClearAllPoints()
+                r.mark:SetPoint("LEFT", 8, 0)
+                r.fill:SetShown(isSel)
+                x = 28
+            else
+                r.mark:Hide()
+            end
+            if item.icon then
+                r.icon:Show()
+                r.icon:ClearAllPoints()
+                r.icon:SetPoint("LEFT", x, 0)
+                r.icon:SetTexture(item.icon)
+                x = x + 22
+            else
+                r.icon:Hide()
+            end
+            r.text:ClearAllPoints()
+            r.text:SetPoint("LEFT", x, 0)
+            r.text:SetPoint("RIGHT", -10, 0)
+            r.text:SetText(item.text or "")
+            r.text:SetTextColor(rgba(item.disabled and C.disabled or C.text))
+            r:Show()
+        else
+            r.item = nil
+            r:Hide()
+        end
+    end
+    if n > MAXV then
+        local trackH = popup:GetHeight() - 8
+        local thumbH = math.max(14, trackH * MAXV / n)
+        local travel = trackH - thumbH
+        popup.thumb:SetHeight(thumbH)
+        popup.thumb:ClearAllPoints()
+        popup.thumb:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -2, -4 - travel * popup.offset / (n - MAXV))
+        popup.thumb:Show()
+    else
+        popup.thumb:Hide()
+    end
+end
+
+local function popupWheel(_, delta)
+    if not popup or not popup:IsShown() then return end
+    popup.offset = popup.offset - delta
+    renderPopup()
+end
+
+local function buildPopup()
+    blocker = CreateFrame("Button", nil, UIParent)
+    blocker:SetAllPoints(UIParent)
+    blocker:SetFrameStrata("FULLSCREEN_DIALOG")
+    blocker:SetFrameLevel(1)
+    blocker:RegisterForClicks("AnyUp")
+    blocker:Hide()
+    blocker:SetScript("OnClick", function() UI.ClosePopup() end)
+
+    popup = UI.Box(UIParent, C.popup, C.borderHi)
+    _G.HeadsUpPopup = popup
+    popup:SetFrameStrata("FULLSCREEN_DIALOG")
+    popup:SetFrameLevel(10)
+    popup:EnableMouse(true)
+    popup:EnableMouseWheel(true)
+    popup:SetScript("OnMouseWheel", popupWheel)
+    popup:SetScript("OnHide", function() blocker:Hide() end)
+    popup:Hide()
+    popup.offset = 0
+    popup.items = {}
+
+    popup.thumb = popup:CreateTexture(nil, "OVERLAY")
+    popup.thumb:SetWidth(3)
+    popup.thumb:SetColorTexture(rgba(C.borderHi))
+    popup.thumb:Hide()
+
+    popup.rows = {}
+    for i = 1, MAXV do
+        local r = CreateFrame("Button", nil, popup)
+        r:SetHeight(ITEM_H)
+        r:SetPoint("TOPLEFT", popup, "TOPLEFT", 4, -4 - (i - 1) * ITEM_H)
+        r:SetPoint("RIGHT", popup, "RIGHT", -4, 0)
+        r.hl = r:CreateTexture(nil, "BACKGROUND")
+        r.hl:SetAllPoints()
+        r.hl:SetColorTexture(1, 1, 1, 0.08)
+        r.hl:Hide()
+        r.mark = UI.Box(r, C.field, C.border)
+        r.mark:SetSize(12, 12)
+        r.fill = r.mark:CreateTexture(nil, "OVERLAY")
+        r.fill:SetSize(6, 6)
+        r.fill:SetPoint("CENTER")
+        r.fill:SetColorTexture(rgba(C.accent))
+        r.icon = r:CreateTexture(nil, "ARTWORK")
+        r.icon:SetSize(16, 16)
+        r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        r.text = UI.Text(r, 12, C.text)
+        r:EnableMouseWheel(true)
+        r:SetScript("OnMouseWheel", popupWheel)
+        r:SetScript("OnEnter", function(self)
+            if self.item and not self.item.disabled then self.hl:Show() end
+        end)
+        r:SetScript("OnLeave", function(self) self.hl:Hide() end)
+        r:SetScript("OnClick", function(self) UI.PopupClick(self) end)
+        popup.rows[i] = r
+    end
+    tinsert(UISpecialFrames, "HeadsUpPopup")
+end
+
+function UI.PopupOwner()
+    if popup and popup:IsShown() then return popup.owner end
+    return nil
+end
+
+function UI.OpenPopup(anchor, items, width)
+    if not popup then buildPopup() end
+    popup.items = items
+    popup.owner = anchor
+    popup.offset = 0
+    -- start the list at the chosen item
+    for index, item in ipairs(items) do
+        if item.selected and item.selected() then
+            popup.offset = math.max(0, index - 4)
+            break
+        end
+    end
+    popup:SetWidth(math.max(width or anchor:GetWidth(), 120))
+    popup:ClearAllPoints()
+    local height = math.min(#items, MAXV) * ITEM_H + 8
+    local bottom = (anchor:GetBottom() or 0) * anchor:GetEffectiveScale()
+    if bottom - height * popup:GetEffectiveScale() > 10 then
+        popup:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    else
+        popup:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 2)
+    end
+    renderPopup()
+    blocker:Show()
+    popup:Show()
+    popup:Raise()
+    if anchor.Paint then anchor:Paint() end
+end
+
+function UI.ClosePopup()
+    if popup and popup:IsShown() then
+        local owner = popup.owner
+        popup.owner = nil
+        popup:Hide()
+        if owner and owner.Paint then owner:Paint() end
+    end
+    if blocker then blocker:Hide() end
+end
+
+function UI.PopupClick(row)
+    local item = row.item
+    if not item or item.disabled then return end
+    if item.keepOpen then
+        if item.onClick then item.onClick() end
+        renderPopup()
+    else
+        UI.ClosePopup()
+        if item.onClick then item.onClick() end
+    end
+end
+
+function UI.Dropdown(parent, width, openFn)
+    local b = UI.Box(parent, C.field, C.border, "Button")
+    b:SetSize(width, L.CTRL_H)
+    b.text = UI.Text(b, 12, C.text)
+    b.text:SetPoint("LEFT", 8, 0)
+    b.text:SetPoint("RIGHT", -24, 0)
+    b.chev = Chevron(b)
+    b.chev:SetPoint("RIGHT", -9, 0)
+    Interactive(b, function(self)
+        local on = self:IsEnabled()
+        local hov = on and (self.hover or UI.PopupOwner() == self)
+        self:SetBackdropColor(rgba(hov and C.fieldHover or C.field))
+        self:SetBackdropBorderColor(rgba(hov and C.borderHi or C.border))
+        self.text:SetTextColor(rgba(on and C.text or C.disabled))
+        self.chev:SetColor(on and C.muted or C.disabled)
+    end)
+    function b:SetLabel(t) self.text:SetText(t or "") end
+    b:SetScript("OnClick", function(self)
+        if UI.PopupOwner() == self then UI.ClosePopup() else openFn(self) end
+    end)
+    b:Paint()
+    return b
+end
+
+------------------------------------------------------------
+-- pages, cards, rows
+------------------------------------------------------------
+local registry = {}
+
+function UI.SyncAll()
+    local d = HeadsUp_GetDraft()
+    for _, w in ipairs(registry) do w.Sync(d) end
+end
+
+-- called after the player changed something: set UI.onChange to apply it and refresh
+function UI.Changed()
+    if UI.onChange then UI.onChange() else UI.SyncAll() end
+end
+
+-- Binds a definition to the draft: def.key, or def.get / def.set
+local function Bind(def)
+    local get = def.get or function(d) return d[def.key] end
+    local set = def.set or function(d, v) d[def.key] = v end
+    return get, set
+end
+
+-- Builds one control of a row. def.type: dropdown | input | button | icon
+local function MakeControl(card, def, x, y, w)
+    local c = {}
+    local f
+    local kind = def.type
+    if kind == "dropdown" then
+        f = UI.Dropdown(card, w, function(self)
+            UI.OpenPopup(self, def.items(HeadsUp_GetDraft()))
+        end)
+        function c.Sync(d, on)
+            f:SetLabel(d and def.text(d) or "")
+            f:SetOn(on)
+        end
+    elseif kind == "input" then
+        local function current(d) return tostring(def.get(d) or "") end
+        f = UI.Input(card, w, {
+            numeric = def.numeric, maxLetters = def.maxLetters, unit = def.unit,
+            commit = function(eb)
+                if not UI.IsOpen() then return end
+                local d = HeadsUp_GetDraft()
+                if not d then return end
+                local v = eb:GetText()
+                if def.numeric or def.signed then   -- signed: may start with a minus sign
+                    v = tonumber(v)
+                    if v then def.set(d, v) end
+                else
+                    def.set(d, v)
+                end
+                if def.noApply then UI.SyncAll() else UI.Changed() end
+            end,
+            revert = function(eb)
+                local d = HeadsUp_GetDraft()
+                if d then eb:SetText(current(d)) end
+            end,
+        })
+        function c.Sync(d, on)
+            if d and not f.edit:HasFocus() then f.edit:SetText(current(d)) end
+            f:SetOn(on)
+        end
+    elseif kind == "button" then
+        f = UI.Button(card, def.text, w)
+        f:SetScript("OnClick", function()
+            local d = HeadsUp_GetDraft()
+            if d then def.onClick(d, f) end
+        end)
+        function c.Sync(d, on)
+            f:SetOn(on and (def.enabled == nil or def.enabled(d)))
+        end
+    elseif kind == "link" then
+        -- a small toggle between two boxes (the width / height link): def.active(d) = switched on
+        f = UI.Button(card, def.text or "x", w)
+        f:SetScript("OnClick", function()
+            local d = HeadsUp_GetDraft()
+            if d then def.onClick(d) end
+        end)
+        function c.Sync(d, on)
+            local active = d and def.active(d)
+            f.textColor = active and C.accent or C.muted
+            f.label:SetText(active and (def.textOn or "=") or (def.textOff or "x"))
+            f:SetOn(on)
+        end
+    elseif kind == "icon" then
+        f = UI.IconButton(card, w, def.text)
+        f:SetScript("OnClick", function()
+            local d = HeadsUp_GetDraft()
+            if d then def.onClick(d, f) end
+        end)
+        function c.Sync(d, on)
+            f.icon:SetTexture(d and def.icon(d) or "Interface\\Icons\\INV_Misc_QuestionMark")
+            f.icon:SetDesaturated(not on)
+            f:SetOn(on)
+        end
+    else
+        error("HeadsUp UI: unknown control type " .. tostring(kind))
+    end
+    f:SetPoint("TOPLEFT", card, "TOPLEFT", x, -y)
+    -- (a number box shows its tooltip from the box inside it: the frame around it has no mouse)
+    if def.tip then UI.Tip(kind == "input" and f.edit or f, def.tip) end
+    c.frame = f
+    return c
+end
+
+local CardMethods = {}
+
+-- the next row; returns where the top of a control of that row is
+function CardMethods:AddRow()
+    local y = self.used
+    self.used = self.used + L.ROW_H
+    self:SetHeight(self.used + 8)
+    self.page.y = self.top + self:GetHeight() + L.CARD_GAP
+    return y + (L.ROW_H - L.CTRL_H) / 2
+end
+
+-- puts the controls of a row on the right, side by side; returns them and the columns they use
+local function BuildControls(card, defs, y)
+    -- controls with a width of their own (w, in pixels): placed side by side against the right edge
+    if defs and #defs > 0 and defs[1].w then
+        local total = 0
+        for index, cd in ipairs(defs) do
+            total = total + cd.w + (index < #defs and (cd.gap or L.GAP) or 0)   -- gap: pixels after it
+        end
+        local x = L.PAD + L.INNER_W - total
+        local list = {}
+        for _, cd in ipairs(defs) do
+            list[#list + 1] = MakeControl(card, cd, x, card.rowY, cd.w)
+            x = x + cd.w + (cd.gap or L.GAP)
+        end
+        return list, math.max(1, math.floor((L.INNER_W - total) / (L.COL_W + L.GAP)))
+    end
+    local total = 0
+    for _, cd in ipairs(defs or {}) do total = total + (cd.span or 2) end
+    local col = L.COLS - total + 1
+    local list = {}
+    for _, cd in ipairs(defs or {}) do
+        local span = cd.span or 2
+        local extra = cd.extra or 0   -- pixels added on the left (to line up with a wider field above)
+        list[#list + 1] = MakeControl(card, cd, colX(col) - extra, card.rowY, spanW(span) + extra)
+        col = col + span
+    end
+    return list, L.COLS - total
+end
+
+-- label + controls. def = { label, usable = function(d) -> bool, controls = { ... }, tip }
+function CardMethods:Field(def)
+    self.rowY = self:AddRow()
+    local ctrls, labelSpan = BuildControls(self, def.controls, self.rowY)
+    local label = UI.Text(self, 12, C.text)
+    label:SetPoint("LEFT", self, "TOPLEFT", L.PAD, -(self.rowY + L.CTRL_H / 2))
+    label:SetWidth(spanW(labelSpan) - L.GAP)
+    if type(def.label) ~= "function" then label:SetText(def.label or "") end
+    if def.tip then
+        -- the label itself gets the tooltip through a transparent hit area
+        local hit = CreateFrame("Frame", nil, self)
+        hit:EnableMouse(true)
+        hit:SetPoint("TOPLEFT", self, "TOPLEFT", L.PAD, -self.rowY)
+        hit:SetSize(spanW(labelSpan), L.CTRL_H)
+        UI.Tip(hit, def.tip)
+    end
+    registry[#registry + 1] = { Sync = function(d)
+        local usable = d ~= nil and (def.usable == nil or def.usable(d)) and true or false
+        if type(def.label) == "function" then label:SetText(d and def.label(d) or "") end
+        label:SetTextColor(rgba(usable and C.text or C.disabled))
+        for _, c in ipairs(ctrls) do c.Sync(d, usable) end
+    end }
+end
+
+-- checkbox + label (+ controls that work only while it is ticked).
+-- def = { label, key | get / set, usable, controls, tip }
+function CardMethods:Condition(def)
+    self.rowY = self:AddRow()
+    local get, set = Bind(def)
+    local ctrls, labelSpan = BuildControls(self, def.controls, self.rowY)
+    local indent = def.indent and 26 or 0   -- a sub-option of the row above it
+    local check = UI.Check(self, spanW(labelSpan) - (labelSpan < L.COLS and L.GAP or 0) - indent,
+        type(def.label) ~= "function" and def.label or "")
+    check:SetPoint("TOPLEFT", self, "TOPLEFT", L.PAD + indent, -self.rowY)
+    check:SetScript("OnClick", function()
+        local d = HeadsUp_GetDraft()
+        if not d then return end
+        set(d, not get(d))
+        UI.Changed()
+    end)
+    if def.tip then UI.Tip(check, def.tip) end
+    registry[#registry + 1] = { Sync = function(d)
+        local usable = d ~= nil and (def.usable == nil or def.usable(d)) and true or false
+        if type(def.label) == "function" then check.label:SetText(d and def.label(d) or "") end
+        check:SetValue(d and get(d))
+        check:SetOn(usable)
+        local on = usable and (d and get(d) and true or false)
+        for _, c in ipairs(ctrls) do c.Sync(d, on) end
+    end }
+end
+
+-- one line of small grey text. def = { text = function(d) -> string, color = function(d) -> color }
+function CardMethods:Note(def)
+    self.rowY = self:AddRow()
+    local fs = UI.Text(self, 11, C.muted)
+    fs:SetPoint("LEFT", self, "TOPLEFT", L.PAD, -(self.rowY + L.CTRL_H / 2))
+    fs:SetWidth(L.INNER_W)
+    registry[#registry + 1] = { Sync = function(d)
+        fs:SetText(d and def.text(d) or "")
+        local c = d and def.color and def.color(d) or C.muted
+        fs:SetTextColor(rgba(c))
+    end }
+end
+
+function UI.NewPage(parent)
+    local scroll = CreateFrame("ScrollFrame", nil, parent)
+    scroll:SetAllPoints(parent)
+    local child = CreateFrame("Frame", nil, scroll)
+    child:SetSize(L.PAGE_W, 10)
+    scroll:SetScrollChild(child)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        local range = self:GetVerticalScrollRange() or 0
+        self:SetVerticalScroll(clamp(self:GetVerticalScroll() - delta * 40, 0, range))
+    end)
+    scroll:Hide()
+
+    local page = { frame = scroll, child = child, y = 0 }
+
+    function page:Card(title)
+        local card = UI.Box(child, C.card, C.border)
+        for k, v in pairs(CardMethods) do card[k] = v end
+        card.page = self
+        card.top = self.y
+        card.used = L.TITLE_H
+        card:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -self.y)
+        card:SetWidth(L.PAGE_W)
+        card:SetHeight(L.TITLE_H + 8)
+
+        card.title = UI.Text(card, 13, C.accent)
+        card.title:SetPoint("TOPLEFT", card, "TOPLEFT", L.PAD, -11)
+        card.title:SetText(title or "")
+
+        local line = card:CreateTexture(nil, "ARTWORK")
+        line:SetPoint("TOPLEFT", card, "TOPLEFT", L.PAD, -(L.TITLE_H - 6))
+        line:SetPoint("TOPRIGHT", card, "TOPRIGHT", -L.PAD, -(L.TITLE_H - 6))
+        line:SetHeight(1)
+        line:SetColorTexture(rgba(C.border))
+
+        self.y = card.top + card:GetHeight() + L.CARD_GAP
+        return card
+    end
+
+    function page:Finish()
+        child:SetHeight(math.max(self.y - L.CARD_GAP, 10))   -- (no gap after the last card)
+    end
+
+    return page
+end

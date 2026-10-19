@@ -1,0 +1,9 @@
+# private notes of the project (paths and account names) - stay on this computer
+CLAUDE.md
+ΟΔΗΓΙΕΣ_CurseForge.md
+
+# downloaded data and built files
+tools/cache/
+dist/
+*.zip
+*.bak

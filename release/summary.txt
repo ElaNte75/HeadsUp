@@ -1,0 +1,1 @@
+Build your own "press this now" icons for any class: conditions, resources, procs, effects. Beta.
