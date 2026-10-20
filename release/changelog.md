@@ -1,3 +1,12 @@
+## 1.1 beta
+
+- **Status page in two cards:** Player (health, main and second resource, stance) and Target (hostile or friendly, player or NPC, boss / rare / elite / normal, alive or dead, enemy health, aggro on me).
+- "Show it only" has more choices: stealthed, group (solo, party, raid) and place (open world, dungeon, raid, Delve or scenario, PvP).
+- **New themed Empowered effects:** Frost, Blood and Poison, and "Auto (by spec)" that picks one from your specialization. You can also choose None, and switch off the soft light of the themed effects.
+- **Round icon shape:** the picture and the cooldown cut to a circle, with a rim that follows the effect.
+- Dropdowns are all the same width and show a tooltip with the full choice when something does not fit, or when several choices are ticked.
+- Works with game versions 12.1.0, 12.1.5 and 12.1.7.
+
 ## 1.0 beta
 
 First public version.

@@ -2,7 +2,7 @@
 ## Title: HeadsUp
 ## Notes: Shows the important "press this now" icon at the moment it matters, using conditions you set (health, resources, cooldowns, empowered abilities, combat state and more).
 ## Author: ElaNte
-## Version: 1.0 beta
+## Version: 1.1 beta
 ## SavedVariables: HeadsUpDB
 ## IconTexture: Interface\AddOns\HeadsUp\Media\icon.tga
 ## AddonCompartmentFunc: HeadsUp_OnCompartmentClick

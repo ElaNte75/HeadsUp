@@ -55,6 +55,6 @@ Since patch 12.0 the game hides some values from add-ons during combat (your hea
 
 ## Beta
 
-HeadsUp is in **beta (1.0 beta)**. It was built and tested on a Death Knight; other classes should work, but they are not tested yet. **Your feedback is very important to us.** Tell us what problem you ran into, what you need, or which ability did not work well, so we can make it better: use the **Send feedback** button in the window, or leave a comment on this page.
+HeadsUp is in **beta (1.1 beta)**. It was built and tested on a Death Knight; other classes should work, but they are not tested yet. **Your feedback is very important to us.** Tell us what problem you ran into, what you need, or which ability did not work well, so we can make it better: use the **Send feedback** button in the window, or leave a comment on this page.
 
 *World of Warcraft is a trademark of Blizzard Entertainment, Inc. This add-on is not connected to Blizzard Entertainment.*

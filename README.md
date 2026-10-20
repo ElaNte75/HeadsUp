@@ -4,7 +4,7 @@
 
 You build your own icons ("auras") with a simple step-by-step window: choose an ability, tell HeadsUp *when* it should show, and place it on the screen. Each icon shows only when **all** the conditions you chose are true.
 
-> **Beta (1.0 beta).** It was built and tested on a Death Knight. Other classes should work, but they are not tested yet: please tell us what you find (see *Feedback*).
+> **Beta (1.1 beta).** It was built and tested on a Death Knight. Other classes should work, but they are not tested yet: please tell us what you find (see *Feedback*).
 
 ## What you can do
 
