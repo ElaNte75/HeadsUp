@@ -150,6 +150,13 @@ local OP_LIST = {
 local PCT_LIST = {}
 for v = 10, 100, 5 do PCT_LIST[#PCT_LIST + 1] = { value = v, text = v .. "%" } end
 
+-- the kinds of enemy for "Target category" (several can be ticked)
+local TARGET_KINDS = {
+    { value = "boss", text = "Boss" },
+    { value = "rare", text = "Rare" },
+    { value = "elite", text = "Elite" },
+    { value = "normal", text = "Normal" },
+}
 local YESNO_LIST = { { value = "yes", text = "Yes" }, { value = "no", text = "No" } }
 local CD_LIST = { { value = "cooling", text = "on cooldown" }, { value = "ready", text = "not on cooldown" } }
 local BUFF_LIST = { { value = "active", text = "active" }, { value = "gone", text = "not active" } }
@@ -160,9 +167,14 @@ local EFFECT_LIST = {
 }
 -- the effect of an icon shown because its ability is empowered (there is always one chosen)
 local EMPOWER_FX_LIST = {
+    { value = "auto", text = "Auto (by spec)" },
+    { value = "frost", text = "Frost" },
+    { value = "blood", text = "Blood" },
+    { value = "poison", text = "Poison" },
     { value = "sunburst", text = "Sunburst" },
     { value = "flame", text = "Flame" },
     { value = "burst", text = "Burst" },
+    { value = "none", text = "None" },
 }
 local LAYER_LIST = {
     { value = 5, text = "Highest" },
@@ -182,12 +194,17 @@ end
 
 -- "Show it only": in which situation the aura may show at all (the conditions then apply).
 -- Several can be ticked. Inside a pair (combat / mount / vehicle) ticking only one restricts to it.
-local WHEN_ORDER = { "always", "combat", "out", "mounted", "unmounted", "vehicle", "novehicle" }
+local WHEN_ORDER = { "always", "combat", "out", "mounted", "unmounted", "vehicle", "novehicle",
+    "stealth", "nostealth", "solo", "inparty", "inraid", "world", "dungeon", "raidinst", "delve", "pvp" }
 local WHEN_LABELS = {
     always = "Always",
     combat = "In combat", out = "Out of combat",
     mounted = "Mounted", unmounted = "Not mounted",
     vehicle = "In a vehicle", novehicle = "Not in a vehicle",
+    stealth = "Stealthed", nostealth = "Not stealthed",
+    solo = "Group: Solo", inparty = "Group: Party", inraid = "Group: Raid",
+    world = "Place: Open world", dungeon = "Place: Dungeon", raidinst = "Place: Raid",
+    delve = "Place: Delve or scenario", pvp = "Place: PvP",
 }
 
 -- Text shown on the closed dropdown: the one chosen, or how many are chosen.
@@ -791,8 +808,14 @@ local function BuildAuraPage(page)
 
     local look = page:Card("Appearance")
     look:Field({
+        label = "Icon shape",
+        usable = HasAbility,
+        tip = Tip("Icon shape", "Square: the icon as it is. Round: the picture cut to a circle, with a rim that follows the Empowered effect (frost, blood, poison...), so that icon and effect look like one thing.", "A round icon is as wide as it is high (the larger of the two sizes)."),
+        controls = { Choice("shape", { { value = "square", text = "Square" }, { value = "round", text = "Round" } }, "square") },
+    })
+    look:Field({
         label = "Show effect",
-        tip = Tip("Show effect", "A ring around the icon while it shows.", "None: nothing.  Glow: a pulsing ring.  Pulse: a pulsing ring, and the icon breathes."),
+        tip = Tip("Show effect", "A ring around the icon, whenever the icon shows. It works on its own: the Empowered effect below is a separate thing and can be used together with it, or instead of it.", "None: nothing.  Glow: a pulsing ring.  Pulse: a pulsing ring, and the icon breathes."),
         usable = HasAbility,
         controls = { Choice("effect", EFFECT_LIST, "none") },
     })
@@ -807,7 +830,17 @@ local function BuildAuraPage(page)
             tt:AddLine("Flame: flickering orange rings.", 0.7, 0.7, 0.7)
             tt:AddLine("Burst: a flash when it lights up, then a soft glow.", 0.7, 0.7, 0.7)
         end,
-        controls = { Choice("empowerFx", EMPOWER_FX_LIST, "sunburst") },
+        controls = { Choice("empowerFx", EMPOWER_FX_LIST, "auto") },
+    })
+    -- the soft light of the themed effects (frost, blood, poison); the Show effect ring above is separate
+    look:Field({
+        label = "Empowered light",
+        usable = function(d)
+            local style = HeadsUp_ResolveFx(d)
+            return HasAbility(d) and (style == "frost" or style == "blood" or style == "poison")
+        end,
+        tip = Tip("Empowered light", "The soft coloured light behind a themed Empowered effect (Frost, Blood, Poison). Off: the effect keeps its icicles, splashes and bubbles but not the light, so the Show effect ring above can be the only glow.", "Show effect (the ring) and Empowered effect work independently: use both, one of them, or none."),
+        controls = { Choice("empowerLight", { { value = "on", text = "On" }, { value = "off", text = "Off" } }, "on") },
     })
     look:Field({
         label = "Display priority",
@@ -824,33 +857,22 @@ end
 -- STEP 2: Conditions (what the aura looks at)
 ------------------------------------------------------------
 local function BuildConditionsPage(page)
-    local health = page:Card("Health")
-    health:Condition({
-        label = "Player health is", key = "healthEnabled", usable = HasAbility,
+    ---------------------------------------------------------------
+    -- You: the player
+    ---------------------------------------------------------------
+    local you = page:Card("Player")
+    you:Condition({
+        label = "Health is:", key = "healthEnabled", usable = HasAbility,
         tip = Tip("Player health", "Shows the icon only while your health compares like this with the percent you choose.", "Example: below 85%."),
         controls = { Choice("healthOp", OP_LIST, "<"), Choice("healthPct", PCT_LIST, 80) },
-    })
-    health:Condition({
-        label = "Enemy health is", key = "enemyEnabled", usable = HasAbility,
-        tip = Tip("Enemy health", "Same as your health, for the enemy: your target, when you can attack it. With no hostile target selected this condition is not met."),
-        controls = { Choice("enemyOp", OP_LIST, "<"), Choice("enemyPct", PCT_LIST, 80) },
-    })
-    health:Condition({
-        label = "Enemy is alive", key = "enemyAliveEnabled", usable = HasAbility,
-        tip = function(tt)
-            tt:AddLine("Enemy is alive", 1, 0.82, 0)
-            tt:AddLine("The enemy is your target, when you can attack it.", 1, 1, 1, true)
-        end,
-        controls = { Choice("enemyAlive", YESNO_LIST, "yes") },
     })
 
     -- the resources of your class: they change with the class (runic power and runes for a
     -- Death Knight, mana and holy power for a Paladin, ...)
-    local resource = page:Card("Resources")
-    resource:Condition({
+    you:Condition({
         label = function()
             local primary = HeadsUp_GetResources().primary
-            return (primary and primary.name or "Resource") .. " is"
+            return (primary and primary.name or "Resource") .. " is:"
         end,
         key = "powerEnabled",
         tip = Tip("Main resource", "Your main resource (Runic Power, Mana, Rage...): it follows your class.", "Mana is compared in percent, the others in points."),
@@ -871,7 +893,7 @@ local function BuildConditionsPage(page)
             end, 40),
         },
     })
-    resource:Condition({
+    you:Condition({
         label = function()
             local second = HeadsUp_GetResources().secondary
             return second and (second.name .. ":") or "No second resource for your class"
@@ -888,6 +910,91 @@ local function BuildConditionsPage(page)
                 return list
             end, 1),
         },
+    })
+
+    -- the forms of your class (druid: Bear, Cat, Moonkin...). A class without forms has none to choose.
+    local function FormList()
+        local list = { { value = 0, text = "No stance" } }
+        for i = 1, GetNumShapeshiftForms() or 0 do
+            local _, _, _, id = GetShapeshiftFormInfo(i)
+            local name = id and C_Spell.GetSpellName(id)
+            if id and name then list[#list + 1] = { value = id, text = name } end
+        end
+        return list
+    end
+    you:Condition({
+        label = function()
+            return "Stance is:"
+        end,
+        key = "formEnabled",
+        tip = Tip("Stance", "Shows the icon only while you are in the stance you choose (Bear, Cat, Moonkin...), or in no stance.", "Only classes that have stances can use it; for the others it stays grey."),
+        usable = function(d) return HasAbility(d) and (GetNumShapeshiftForms() or 0) > 0 end,
+        controls = { Choice("formSpell", FormList, 0) },
+    })
+
+    ---------------------------------------------------------------
+    -- Target: the enemy (or friend) you have selected
+    ---------------------------------------------------------------
+    local target = page:Card("Target")
+    local NOTARGET = "With no target selected, a condition about the target is not met."
+    target:Condition({
+        label = "Target is:", key = "tgtHostileEnabled", usable = HasAbility,
+        tip = Tip("Enemy or friendly", "Shows the icon only while your target is hostile (one you can attack) or friendly.", NOTARGET),
+        controls = { Choice("tgtHostile", { { value = "enemy", text = "hostile" }, { value = "friend", text = "friendly" } }, "enemy") },
+    })
+    target:Condition({
+        label = "Target is a:", key = "tgtTypeEnabled", usable = HasAbility,
+        tip = Tip("Player or NPC", "Shows the icon only while your target is another player, or only while it is a creature (NPC).", NOTARGET),
+        controls = { Choice("tgtType", { { value = "npc", text = "NPC" }, { value = "player", text = "player" } }, "npc") },
+    })
+    target:Condition({
+        label = "Target category:",
+        key = "tgtClassEnabled", usable = HasAbility,
+        tip = Tip("Boss, rare, elite, normal", "Shows the icon only while your target is one of the kinds you tick. A boss is a world boss or a creature with a skull level. A rare elite counts as Rare and as Elite.", "Example: tick Rare and Boss, so it does not show on ordinary mobs. " .. NOTARGET),
+        controls = {
+            {
+                type = "dropdown",
+                text = function(d)
+                    local count, last = 0, nil
+                    for _, o in ipairs(TARGET_KINDS) do
+                        if d.tgtClass and d.tgtClass[o.value] then count = count + 1 last = o.text end
+                    end
+                    if count == 0 then return "Choose..." end
+                    if count == 1 then return last end
+                    return count .. " selected"
+                end,
+                items = function(d)
+                    d.tgtClass = d.tgtClass or {}
+                    local items = {}
+                    for _, o in ipairs(TARGET_KINDS) do
+                        items[#items + 1] = {
+                            text = o.text, keepOpen = true,
+                            selected = function() return d.tgtClass[o.value] and true or false end,
+                            onClick = function()
+                                d.tgtClass[o.value] = (not d.tgtClass[o.value]) or nil
+                                UI.Changed()
+                            end,
+                        }
+                    end
+                    return items
+                end,
+            },
+        },
+    })
+    target:Condition({
+        label = "Target is alive:", key = "enemyAliveEnabled", usable = HasAbility,
+        tip = Tip("Alive or dead", "Shows the icon only while your target is alive (Yes) or dead (No).", NOTARGET),
+        controls = { Choice("enemyAlive", YESNO_LIST, "yes") },
+    })
+    target:Condition({
+        label = "Enemy health is:", key = "enemyEnabled", usable = HasAbility,
+        tip = Tip("Enemy health", "Same as your health, for the enemy: your target, when you can attack it.", NOTARGET),
+        controls = { Choice("enemyOp", OP_LIST, "<"), Choice("enemyPct", PCT_LIST, 80) },
+    })
+    target:Condition({
+        label = "Aggro on me:", key = "threatEnabled", usable = HasAbility,
+        tip = Tip("Aggro on me", "Yes: your target has aggro on you (it is attacking you). No: it is not attacking you. Useful for tanks, to see that an enemy is loose, and for others, to see that it turned on them.", "Only enemies you are fighting have it. " .. NOTARGET),
+        controls = { Choice("threatState", YESNO_LIST, "yes") },
     })
 end
 
@@ -1165,11 +1272,11 @@ local STEPS = {
     { label = "Aura", build = BuildAuraPage,
         tip = "What the aura is: the ability, its name, the picture, the size, the place on the screen and the look." },
     { label = "Status", build = BuildConditionsPage,
-        tip = "When it shows, part 1: your health, the enemy's health, your resources." },
+        tip = "When it shows, part 1: you (health, resources, form) and your target (enemy or friendly, category, alive, health, attacking you)." },
     { label = "Ability", build = BuildAbilityPage,
         tip = "When it shows, part 2: whether the ability is available, its cooldown and charges, and whether it is empowered." },
     { label = "Situation", build = BuildSituationPage,
-        tip = "Where and for whom it shows: in combat, mounted, in a vehicle, and for which specializations." },
+        tip = "Where and for whom it shows: in combat, mounted, in a vehicle, stealthed, in a group, in a dungeon or raid, and for which specializations." },
 }
 local currentStep = 1
 

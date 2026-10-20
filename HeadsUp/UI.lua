@@ -385,7 +385,14 @@ function UI.OpenPopup(anchor, items, width)
             break
         end
     end
-    popup:SetWidth(math.max(width or anchor:GetWidth(), 120))
+    -- wide enough for the longest item (a narrow dropdown may open a wider list)
+    UI.measure = UI.measure or UI.Text(UIParent, 12, C.text)
+    local widest = 0
+    for _, item in ipairs(items) do
+        UI.measure:SetText(item.text or "")
+        widest = math.max(widest, UI.measure:GetStringWidth() + 34)
+    end
+    popup:SetWidth(math.max(width or anchor:GetWidth(), 120, widest))
     popup:ClearAllPoints()
     local height = math.min(#items, MAXV) * ITEM_H + 8
     local bottom = (anchor:GetBottom() or 0) * anchor:GetEffectiveScale()
@@ -482,6 +489,30 @@ local function MakeControl(card, def, x, y, w)
             f:SetLabel(d and def.text(d) or "")
             f:SetOn(on)
         end
+        -- Automatic tooltip: when the closed box cannot show everything (the text is cut, or several choices
+        -- are ticked and it only says "2 selected"), pointing at it lists the choices, one under the other.
+        f:HookScript("OnEnter", function(self)
+            if UI.PopupOwner() == self then return end
+            local d = HeadsUp_GetDraft()
+            if not d then return end
+            local okItems, items = pcall(def.items, d)
+            if not okItems or type(items) ~= "table" then return end
+            local chosen, multi = {}, false
+            for _, item in ipairs(items) do
+                if item.keepOpen then multi = true end
+                if item.selected and item.selected() then chosen[#chosen + 1] = item.text or "" end
+            end
+            local cut = self.text:GetStringWidth() > (self.text:GetWidth() or 0) + 0.5
+            if not ((multi and #chosen >= 2) or (cut and #chosen >= 1)) then return end
+            local title = def._rowLabel
+            if type(title) == "function" then title = title(d) end
+            title = tostring(title or "Selected"):gsub("[:%s]+$", "")
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(title, 1, 0.82, 0)
+            for _, text in ipairs(chosen) do GameTooltip:AddLine(text, 1, 1, 1) end
+            GameTooltip:Show()
+        end)
+        f:HookScript("OnLeave", function() GameTooltip:Hide() end)
     elseif kind == "input" then
         local function current(d) return tostring(def.get(d) or "") end
         f = UI.Input(card, w, {
@@ -562,6 +593,20 @@ function CardMethods:AddRow()
     return y + (L.ROW_H - L.CTRL_H) / 2
 end
 
+
+-- The width of a standard dropdown: just wide enough for the longest word we put in one ("equal or above"),
+-- so no letter is ever cut. Every standard dropdown gets this width and sits against the right edge;
+-- the room it leaves goes to the label on its left. Measured once, with the game's own font.
+function UI.DropdownWidth()
+    if not L.DROP_W then
+        local fs = UI.Text(UIParent, 12, C.text)
+        fs:SetText("equal or above")
+        L.DROP_W = math.min(spanW(2), math.ceil(fs:GetStringWidth()) + 36)   -- (8 left + 24 right inside the box + a little)
+        fs:Hide()
+    end
+    return L.DROP_W
+end
+
 -- puts the controls of a row on the right, side by side; returns them and the columns they use
 local function BuildControls(card, defs, y)
     -- controls with a width of their own (w, in pixels): placed side by side against the right edge
@@ -576,35 +621,39 @@ local function BuildControls(card, defs, y)
             list[#list + 1] = MakeControl(card, cd, x, card.rowY, cd.w)
             x = x + cd.w + (cd.gap or L.GAP)
         end
-        return list, math.max(1, math.floor((L.INNER_W - total) / (L.COL_W + L.GAP)))
+        return list, math.max(1, math.floor((L.INNER_W - total) / (L.COL_W + L.GAP))), 0
     end
     local total = 0
     for _, cd in ipairs(defs or {}) do total = total + (cd.span or 2) end
     local col = L.COLS - total + 1
     local list = {}
-    for _, cd in ipairs(defs or {}) do
+    local slack = 0   -- the room freed on the left of the first control (for the label)
+    for index, cd in ipairs(defs or {}) do
         local span = cd.span or 2
         local extra = cd.extra or 0   -- pixels added on the left (to line up with a wider field above)
-        list[#list + 1] = MakeControl(card, cd, colX(col) - extra, card.rowY, spanW(span) + extra)
+        local shrink = (cd.type == "dropdown" and span == 2) and (spanW(2) - UI.DropdownWidth()) or 0
+        if index == 1 then slack = shrink end
+        list[#list + 1] = MakeControl(card, cd, colX(col) - extra + shrink, card.rowY, spanW(span) + extra - shrink)
         col = col + span
     end
-    return list, L.COLS - total
+    return list, L.COLS - total, slack
 end
 
 -- label + controls. def = { label, usable = function(d) -> bool, controls = { ... }, tip }
 function CardMethods:Field(def)
     self.rowY = self:AddRow()
-    local ctrls, labelSpan = BuildControls(self, def.controls, self.rowY)
+    for _, cd in ipairs(def.controls or {}) do cd._rowLabel = def.label end   -- (for the automatic tooltip of a dropdown)
+    local ctrls, labelSpan, slack = BuildControls(self, def.controls, self.rowY)
     local label = UI.Text(self, 12, C.text)
     label:SetPoint("LEFT", self, "TOPLEFT", L.PAD, -(self.rowY + L.CTRL_H / 2))
-    label:SetWidth(spanW(labelSpan) - L.GAP)
+    label:SetWidth(spanW(labelSpan) - L.GAP + slack)
     if type(def.label) ~= "function" then label:SetText(def.label or "") end
     if def.tip then
         -- the label itself gets the tooltip through a transparent hit area
         local hit = CreateFrame("Frame", nil, self)
         hit:EnableMouse(true)
         hit:SetPoint("TOPLEFT", self, "TOPLEFT", L.PAD, -self.rowY)
-        hit:SetSize(spanW(labelSpan), L.CTRL_H)
+        hit:SetSize(spanW(labelSpan) + slack, L.CTRL_H)
         UI.Tip(hit, def.tip)
     end
     registry[#registry + 1] = { Sync = function(d)
@@ -620,9 +669,10 @@ end
 function CardMethods:Condition(def)
     self.rowY = self:AddRow()
     local get, set = Bind(def)
-    local ctrls, labelSpan = BuildControls(self, def.controls, self.rowY)
+    for _, cd in ipairs(def.controls or {}) do cd._rowLabel = def.label end   -- (for the automatic tooltip of a dropdown)
+    local ctrls, labelSpan, slack = BuildControls(self, def.controls, self.rowY)
     local indent = def.indent and 26 or 0   -- a sub-option of the row above it
-    local check = UI.Check(self, spanW(labelSpan) - (labelSpan < L.COLS and L.GAP or 0) - indent,
+    local check = UI.Check(self, spanW(labelSpan) - (labelSpan < L.COLS and L.GAP or 0) - indent + slack,
         type(def.label) ~= "function" and def.label or "")
     check:SetPoint("TOPLEFT", self, "TOPLEFT", L.PAD + indent, -self.rowY)
     check:SetScript("OnClick", function()

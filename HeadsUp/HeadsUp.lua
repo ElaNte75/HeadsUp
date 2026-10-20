@@ -41,7 +41,7 @@ local EFFECT_STRATA = { "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN" }
 -- How small the icon gets during "Pulse" (1 = not at all).
 local PULSE_SHRINK = 0.92
 
-local KEYS = { "class", "specs", "name", "hidden", "spellID", "healthEnabled", "healthOp", "healthPct", "enemyEnabled", "enemyOp", "enemyPct", "cdEnabled", "cdState", "chargesEnabled", "chargesState", "enemyAliveEnabled", "enemyAlive", "buffEnabled", "buffID", "buffState", "suppressEnabled", "suppressSeconds", "effect", "icon", "showWhenEnabled", "showRules", "lingerEnabled", "lingerSeconds", "layer", "availEnabled", "pos", "width", "height", "sizeLinked", "powerEnabled", "powerOp", "powerValue", "secEnabled", "secOp", "secValue", "buffAlways", "empowerFx", "soundEnabled", "soundKey", "soundVolume" }
+local KEYS = { "class", "specs", "name", "hidden", "spellID", "healthEnabled", "healthOp", "healthPct", "enemyEnabled", "enemyOp", "enemyPct", "cdEnabled", "cdState", "chargesEnabled", "chargesState", "enemyAliveEnabled", "enemyAlive", "buffEnabled", "buffID", "buffState", "suppressEnabled", "suppressSeconds", "effect", "icon", "showWhenEnabled", "showRules", "lingerEnabled", "lingerSeconds", "layer", "availEnabled", "pos", "width", "height", "sizeLinked", "powerEnabled", "powerOp", "powerValue", "secEnabled", "secOp", "secValue", "buffAlways", "empowerFx", "soundEnabled", "soundKey", "soundVolume", "formEnabled", "formSpell", "tgtHostileEnabled", "tgtHostile", "tgtTypeEnabled", "tgtType", "tgtClassEnabled", "tgtClass", "threatEnabled", "threatState", "shape", "empowerLight" }
 
 local auras = {}        -- saved list (HeadsUpDB.auras)
 local pool = {}         -- pool[i] = indicator for auras[i]
@@ -135,8 +135,20 @@ local function NewConfig()
         cdState = "cooling",     -- ... "cooling" = on cooldown, "ready" = not on cooldown
         chargesEnabled = false,  -- charges condition (only for abilities with several charges) ...
         chargesState = "any",    -- ... "any" = 1 or more charges, "full" = all charges ready
-        enemyAliveEnabled = false, -- the target (a hostile one) is alive / dead ...
+        enemyAliveEnabled = false, -- the target is alive / dead ...
         enemyAlive = "yes",        -- ... "yes" = alive, "no" = dead
+        formEnabled = false,       -- your form (druid forms...) is this one ...
+        formSpell = 0,             -- ... the spell id of the form (0 = no form)
+        tgtHostileEnabled = false, -- the target is an enemy / friendly ...
+        tgtHostile = "enemy",      -- ... "enemy" or "friend"
+        tgtTypeEnabled = false,    -- the target is a player / an NPC ...
+        tgtType = "npc",           -- ... "npc" or "player"
+        tgtClassEnabled = false,   -- the target is a boss / rare / elite / normal mob (any ticked one) ...
+        tgtClass = { boss = true, rare = true },
+        empowerLight = "on",       -- the soft light of a themed Empowered effect: "on" or "off" (the Show effect ring is separate)
+        shape = "square",          -- the icon is a "square" or "round" (a circle with a rim, made to match the effect)
+        threatEnabled = false,     -- the target is attacking me (has aggro on me) ...
+        threatState = "yes",       -- ... "yes" or "no"
         -- "Buff" (e.g. Dark Succor): the ability is lit up by it. The game hides buffs in combat
         -- but not the glow, so the glow of the aura's ability is what is checked.
         buffEnabled = false,
@@ -145,8 +157,8 @@ local function NewConfig()
         soundEnabled = false,    -- play a sound when the aura shows (only when its conditions can be known) ...
         soundKey = "ding",       -- ... this one (see HeadsUpSounds) ...
         soundVolume = 2,         -- ... 1 = soft, 2 = normal, 3 = loud
-        empowerFx = "sunburst",  -- the effect shown while the icon is on because its ability is empowered:
-                                 -- "sunburst", "flame" or "burst" (there is always one)
+        empowerFx = "auto",      -- the effect shown while the icon is on because its ability is empowered:
+                                 -- "auto" (by specialization), "sunburst", "flame", "burst", "frost", "blood", "poison"
         buffAlways = false,      -- with "Empowered: active": also show it whenever it is lit up, ignoring the other
                                  -- conditions (the "Show it only" rules, specs and hide-timer still apply)
         showWhenEnabled = false, -- off = the aura may always show; on = only as chosen below
@@ -171,9 +183,9 @@ local function CopyConfig(src)
     for _, k in ipairs(KEYS) do
         if k == "pos" and src.pos then
             copy.pos = { unpack(src.pos) }
-        elseif k == "showRules" and src.showRules then
-            copy.showRules = {}
-            for rule, on in pairs(src.showRules) do copy.showRules[rule] = on end
+        elseif (k == "showRules" or k == "tgtClass") and src[k] then
+            copy[k] = {}
+            for rule, on in pairs(src[k]) do copy[k][rule] = on end
         elseif k == "specs" and src.specs then
             copy.specs = {}
             for id, on in pairs(src.specs) do copy.specs[id] = on end
@@ -346,6 +358,24 @@ local FX_STAR = "Interface\\Cooldown\\star4"
 local FX_PING = "Interface\\Cooldown\\ping4"
 local FX_RING = "Interface\\Buttons\\UI-ActionButton-Border"
 local FX_WHITE = "Interface\\Buttons\\WHITE8x8"
+-- our own pictures of the themed effects (made by tools/make_fx.py)
+local FX_DIR = "Interface\\AddOns\\HeadsUp\\Media\\fx\\"
+local FX_GLOW, FX_SHARD, FX_FLAKE = FX_DIR .. "glow.tga", FX_DIR .. "shard.tga", FX_DIR .. "flake.tga"
+local FX_SPLAT, FX_DROP, FX_BUBBLE = FX_DIR .. "splat.tga", FX_DIR .. "drop.tga", FX_DIR .. "bubble.tga"
+
+local FX_MASK, FX_RINGGLOW = FX_DIR .. "mask.tga", FX_DIR .. "ringglow.tga"
+-- the rim of a round icon follows the effect (gold for the classic ones)
+local RIM_BY_STYLE = { frost = FX_DIR .. "rim_frost.tga", blood = FX_DIR .. "rim_blood.tga", poison = FX_DIR .. "rim_poison.tga" }
+local RIM_GOLD = FX_DIR .. "rim_gold.tga"
+
+-- The theme of the "Auto" effect: by the specialization (ids). Unlisted specs use the sunburst.
+local SPEC_FX = {
+    [250] = "blood",    -- Death Knight Blood
+    [251] = "frost",    -- Death Knight Frost
+    [252] = "poison",   -- Death Knight Unholy
+    [64] = "frost",     -- Mage Frost
+    [259] = "poison",   -- Rogue Assassination
+}
 
 local function MakeFx(parent)
     local fx = CreateFrame("Frame", nil, parent)
@@ -355,11 +385,11 @@ local function MakeFx(parent)
     fx.styles = {}
 
     -- small helpers: a texture, and the animations
-    local function texture(path, r, g, b, parentFrame)
+    local function texture(path, r, g, b, parentFrame, blend, alpha)
         local t = (parentFrame or fx):CreateTexture(nil, "BACKGROUND")
         t:SetTexture(path)
-        t:SetBlendMode("ADD")
-        t:SetVertexColor(r, g, b, 1)
+        t:SetBlendMode(blend or "ADD")
+        t:SetVertexColor(r, g, b, alpha or 1)
         t:SetPoint("CENTER", parentFrame or fx, "CENTER")
         t:Hide()
         return t
@@ -416,6 +446,37 @@ local function MakeFx(parent)
         else
             group:SetScript("OnFinished", function() region:Hide() end)
         end
+        return group
+    end
+
+    -- a drop that falls (or a bubble that rises: the offset decides) while fading out; then it starts again
+    local function fall(region, seconds, delay, pause)
+        local group = region:CreateAnimationGroup()
+        group:SetLooping("REPEAT")
+        local move = group:CreateAnimation("Translation")
+        move:SetDuration(seconds)
+        move:SetSmoothing("IN")
+        if move.SetStartDelay then move:SetStartDelay(delay or 0) end
+        local fade = group:CreateAnimation("Alpha")
+        fade:SetFromAlpha(1)
+        fade:SetToAlpha(0)
+        fade:SetDuration(seconds)
+        if fade.SetStartDelay then fade:SetStartDelay(delay or 0) end
+        if pause and move.SetEndDelay then
+            move:SetEndDelay(pause)
+            fade:SetEndDelay(pause)
+        end
+        return group, move
+    end
+    -- appears: grows from small while fading in (plays once)
+    local function pop(region, seconds)
+        local group = region:CreateAnimationGroup()
+        local grow = scaleStep(group, 0.35, 1, seconds)
+        grow:SetSmoothing("OUT")
+        local fade = group:CreateAnimation("Alpha")
+        fade:SetFromAlpha(0)
+        fade:SetToAlpha(1)
+        fade:SetDuration(seconds)
         return group
     end
 
@@ -518,21 +579,235 @@ local function MakeFx(parent)
         },
     }
 
+
+    ------------------------------------------------------------
+    -- the themed styles. Their items are tables: tex, w and h (times the icon size), x and y (the
+    -- place of the centre: times the icon width / height from the centre), dy (more, times the icon
+    -- size), dist (an animation that moves: how far, times the icon size; negative = down), anim
+    ------------------------------------------------------------
+    local function themed(tint)
+        return { tint = tint, items = {}, steady = {}, loops = {}, once = {}, lights = {} }
+    end
+    local function add(style, item, loop)
+        style.items[#style.items + 1] = item
+        style.steady[#style.steady + 1] = item.tex
+        if loop then style.loops[#style.loops + 1] = loop end
+        return item
+    end
+    -- a falling drop / a rising bubble: the animation is kept in the item so that Apply can set how far
+    local function mover(style, item, seconds, delay, pause)
+        local group, move = fall(item.tex, seconds, delay, pause)
+        item.anim = move
+        add(style, item, group)
+    end
+
+    -- a splash that keeps coming back: it grows on, stays, fades away, and then comes again somewhere else
+    -- around the icon (turned another way)
+    local function splatCycle(region, hold, fadeTime, pause)
+        local group = region:CreateAnimationGroup()
+        group:SetLooping("REPEAT")
+        local grow = scaleStep(group, 0.3, 1, 0.22)
+        grow:SetSmoothing("OUT")
+        grow:SetOrder(1)
+        local fadeIn = group:CreateAnimation("Alpha")
+        fadeIn:SetFromAlpha(0)
+        fadeIn:SetToAlpha(1)
+        fadeIn:SetDuration(0.22)
+        fadeIn:SetOrder(1)
+        local stay = group:CreateAnimation("Alpha")
+        stay:SetFromAlpha(1)
+        stay:SetToAlpha(1)
+        stay:SetDuration(hold)
+        stay:SetOrder(2)
+        local out = group:CreateAnimation("Alpha")
+        out:SetFromAlpha(1)
+        out:SetToAlpha(0)
+        out:SetDuration(fadeTime)
+        out:SetOrder(3)
+        if pause and out.SetEndDelay then out:SetEndDelay(pause) end
+        group:SetScript("OnLoop", function()
+            local w, h = fx.cw or 50, fx.ch or 50
+            local angle = math.random() * 2 * math.pi
+            local reach = 0.5 + math.random() * 0.35
+            region:ClearAllPoints()
+            region:SetPoint("CENTER", fx, "CENTER", math.cos(angle) * reach * w * 1.15, math.sin(angle) * reach * h * 1.15)
+            if region.SetRotation then region:SetRotation(math.random() * 2 * math.pi) end
+        end)
+        return group
+    end
+
+    -- FROST: a cold light, ice crystals turning slowly, icicles all around (hanging, standing, pointing out),
+    -- drops falling from them, snow drifting down, stars that twinkle, a ring of frost when it turns on
+    local frost = themed({ 0.45, 0.8, 1.0 })
+    local fg1 = texture(FX_GLOW, 0.3, 0.7, 1.0)
+    local fg2 = texture(FX_GLOW, 0.7, 0.95, 1.0)
+    add(frost, { tex = fg1, w = 3.6, h = 3.6 }, pulse(fg1, 0.55, 1.0, 1.3))
+    add(frost, { tex = fg2, w = 2.2, h = 2.2 }, pulse(fg2, 1.0, 0.4, 0.9))
+    frost.lights = { fg1, fg2 }   -- the soft light: it can be switched off
+    local crystal1 = texture(FX_STAR, 0.55, 0.85, 1.0)
+    local crystal2 = texture(FX_STAR, 0.85, 0.97, 1.0)
+    add(frost, { tex = crystal1, w = 4.0, h = 4.0 }, spin(crystal1, 360, 20))
+    add(frost, { tex = crystal2, w = 2.8, h = 2.8 }, spin(crystal2, -360, 13))
+    -- an icicle with a darker blue one behind it (so that it can be seen on any ground)
+    local function icicle(x, y, len, dy, rot, flip, dx)
+        local back = texture(FX_SHARD, 0.15, 0.4, 0.8, nil, "BLEND")
+        local t = texture(FX_SHARD, 0.85, 0.96, 1.0, nil, "BLEND")
+        add(frost, { tex = back, w = len * 0.46, h = len * 1.08, x = x, y = y, dy = dy, dx = dx, rot = rot, flip = flip, radial = true })
+        add(frost, { tex = t, w = len * 0.36, h = len, x = x, y = y, dy = dy, dx = dx, rot = rot, flip = flip, radial = true })
+    end
+    local hang = { { -0.52, 0.5 }, { -0.4, 0.85 }, { -0.28, 0.6 }, { -0.14, 1.05 }, { 0, 0.7 }, { 0.14, 1.2 },
+                   { 0.28, 0.65 }, { 0.4, 0.95 }, { 0.52, 0.55 } }
+    for _, h in ipairs(hang) do icicle(h[1], -0.5, h[2], -h[2] / 2 + 0.06) end
+    local standing = { { -0.5, 0.55 }, { -0.3, 0.8 }, { -0.1, 0.5 }, { 0.12, 0.9 }, { 0.32, 0.6 }, { 0.5, 0.75 } }
+    for _, h in ipairs(standing) do icicle(h[1], 0.5, h[2], h[2] / 2 - 0.06, nil, true) end
+    for _, side in ipairs({ -1, 1 }) do   -- pointing out to the left and to the right
+        for _, h in ipairs({ { 0.22, 0.7 }, { -0.22, 0.55 } }) do
+            icicle(side * 0.5, h[1], h[2], 0, side * math.pi / 2, false, side * (h[2] / 2 - 0.06))
+        end
+    end
+    for i, delay in ipairs({ 0, 0.35, 0.7, 1.05, 1.4 }) do   -- drops from the hanging icicles
+        local t = texture(FX_DROP, 0.75, 0.93, 1.0, nil, "BLEND")
+        local h = hang[i * 2 - 1]
+        mover(frost, { tex = t, w = 0.14, h = 0.28, x = h[1], y = -0.5, dy = -h[2] - 0.05, dist = -0.9 }, 1.2, delay, 0.2)
+    end
+    for i = 1, 6 do   -- snow drifting down
+        local t = texture(FX_FLAKE, 0.9, 0.97, 1.0)
+        local x = -0.6 + (i - 1) * 0.24
+        mover(frost, { tex = t, w = 0.32, h = 0.32, x = x, y = 0.55, dist = -1.7 }, 2.6 + (i % 3) * 0.5, i * 0.4, 0.1)
+    end
+    local corners = { { -0.66, 0.6 }, { 0.68, 0.55 }, { 0.7, -0.6 }, { -0.68, -0.62 } }
+    for i, c in ipairs(corners) do   -- big stars that twinkle
+        local t = texture(FX_FLAKE, 0.85, 0.96, 1.0)
+        add(frost, { tex = t, w = 0.62, h = 0.62, x = c[1], y = c[2] }, pulse(t, 0.25, 1, 0.45 + i * 0.17))
+        frost.loops[#frost.loops + 1] = spin(t, (i % 2 == 0) and 360 or -360, 12 + i * 3)
+    end
+    local ring = texture(FX_PING, 0.5, 0.85, 1.0)
+    frost.items[#frost.items + 1] = { tex = ring, w = 1, h = 1 }
+    frost.once[#frost.once + 1] = { ring, wave(ring, 0.8, 4.4, 0.8), 0 }
+    fx.styles.frost = frost
+
+    -- BLOOD: a red glow, splashes that keep splatting on around the icon (each one grows on, stays, fades,
+    -- and comes again somewhere else), wet drops running off the bottom
+    local blood = themed({ 0.85, 0.05, 0.05 })
+    local bg1 = texture(FX_GLOW, 0.85, 0.05, 0.05)
+    local bg2 = texture(FX_GLOW, 1.0, 0.2, 0.1)
+    add(blood, { tex = bg1, w = 3.4, h = 3.4 }, pulse(bg1, 0.5, 1.0, 1.1))
+    add(blood, { tex = bg2, w = 2.0, h = 2.0 }, pulse(bg2, 0.9, 0.35, 0.8))
+    blood.lights = { bg1, bg2 }
+    local splats = {   -- x, y, size, red, hold, fade
+        { -0.4, -0.25, 1.9, 0.7, 1.4, 0.9 },
+        { 0.45, 0.3, 1.6, 0.8, 1.9, 0.8 },
+        { 0.5, -0.45, 1.2, 0.6, 1.1, 0.7 },
+        { -0.5, 0.45, 1.1, 0.65, 1.7, 0.9 },
+        { 0.0, 0.6, 1.4, 0.75, 1.3, 0.8 },
+        { -0.1, -0.65, 1.3, 0.55, 2.1, 0.9 },
+    }
+    for i, sp in ipairs(splats) do
+        local t = texture(FX_SPLAT, sp[4], 0.02, 0.03, nil, "BLEND")
+        add(blood, { tex = t, w = sp[3], h = sp[3], x = sp[1], y = sp[2] }, splatCycle(t, sp[5], sp[6], 0.1 * i))
+    end
+    for i, x in ipairs({ -0.4, -0.22, -0.04, 0.16, 0.34, 0.5 }) do
+        local t = texture(FX_DROP, 0.8, 0.03, 0.04, nil, "BLEND")
+        mover(blood, { tex = t, w = 0.17, h = 0.34, x = x, y = -0.5, dy = -0.05, dist = -1.0 }, 1.2 + (i % 3) * 0.2, i * 0.25, 0.15)
+    end
+    local flash = texture(FX_PING, 0.9, 0.1, 0.1)
+    blood.items[#blood.items + 1] = { tex = flash, w = 1, h = 1 }
+    blood.once[#blood.once + 1] = { flash, wave(flash, 0.8, 4.2, 0.7), 0 }
+    fx.styles.blood = blood
+
+    -- POISON: a strong toxic light, green smoke turning slowly, a puddle of poison behind, many bubbles
+    -- rising, drops falling, and a wave of poison when it turns on
+    local poison = themed({ 0.4, 0.95, 0.2 })
+    local pg1 = texture(FX_GLOW, 0.3, 1.0, 0.1)
+    local pg2 = texture(FX_GLOW, 0.8, 1.0, 0.4)
+    add(poison, { tex = pg1, w = 3.6, h = 3.6 }, pulse(pg1, 0.55, 1.0, 0.9))
+    add(poison, { tex = pg2, w = 2.0, h = 2.0 }, pulse(pg2, 1.0, 0.35, 0.7))
+    poison.lights = { pg1, pg2 }
+    local smoke1 = texture(FX_STAR, 0.4, 1.0, 0.15)
+    local smoke2 = texture(FX_STAR, 0.6, 1.0, 0.3)
+    add(poison, { tex = smoke1, w = 4.2, h = 4.2 }, spin(smoke1, 360, 22))
+    add(poison, { tex = smoke2, w = 3.0, h = 3.0 }, spin(smoke2, -360, 15))
+    local dark = texture(FX_SPLAT, 0.08, 0.35, 0.04, nil, "BLEND", 0.85)
+    local puddle = texture(FX_SPLAT, 0.4, 0.95, 0.15, nil, "BLEND", 0.8)
+    add(poison, { tex = dark, w = 2.8, h = 2.8, y = -0.05 }, breathe(dark, 0.95, 1.07, 1.9))
+    add(poison, { tex = puddle, w = 2.2, h = 2.2, y = -0.1 }, breathe(puddle, 1.05, 0.93, 1.5))
+    local bubbles = { { -0.5, 0.3, 0.0 }, { -0.3, 0.42, 0.4 }, { -0.1, 0.26, 0.8 }, { 0.12, 0.38, 0.2 },
+                      { 0.32, 0.3, 0.6 }, { 0.5, 0.4, 1.0 }, { -0.4, 0.22, 1.2 }, { 0.0, 0.34, 1.5 },
+                      { 0.22, 0.24, 1.8 }, { 0.42, 0.28, 0.9 } }
+    for _, b in ipairs(bubbles) do
+        local t = texture(FX_BUBBLE, 0.6, 1.0, 0.3)
+        mover(poison, { tex = t, w = b[2], h = b[2], x = b[1], y = -0.4, dist = 1.5 }, 1.9, b[3], 0.05)
+    end
+    for i, x in ipairs({ -0.4, -0.2, 0.0, 0.2, 0.4 }) do
+        local t = texture(FX_DROP, 0.5, 1.0, 0.2)
+        mover(poison, { tex = t, w = 0.15, h = 0.3, x = x, y = -0.5, dy = -0.05, dist = -0.95 }, 1.2, i * 0.3, 0.15)
+    end
+    local ping = texture(FX_PING, 0.4, 1.0, 0.2)
+    poison.items[#poison.items + 1] = { tex = ping, w = 1, h = 1 }
+    poison.once[#poison.once + 1] = { ping, wave(ping, 0.8, 4.4, 0.8), 0 }
+    fx.styles.poison = poison
+
+
     -- choose the style and size (the effect itself is switched on and off with the alpha of the frame)
-    function fx:Apply(style, size, width, height)
+    function fx:Apply(style, size, width, height, round, noLight)
         width, height = width or size, height or size
-        if not self.styles[style] then style = "sunburst" end
+        self.round = round and true or false
+        self.cw, self.ch = width, height   -- (the splashes of the blood style jump around the icon: they need them)
+        if style ~= "none" and not self.styles[style] then style = "sunburst" end
         self.style = style
         for _, st in pairs(self.styles) do
-            for _, item in ipairs(st.items) do item[1]:Hide() end
+            for _, item in ipairs(st.items) do (item.tex or item[1]):Hide() end
             for _, group in ipairs(st.loops) do group:Stop() end
             for _, o in ipairs(st.once or {}) do o[2]:Stop() end
         end
+        if style == "none" then   -- no Empowered effect at all
+            tintPulse:Stop()
+            glintGroup:Stop()
+            top:Hide()
+            return
+        end
+        top:Show()
         local st = self.styles[style]
         for _, item in ipairs(st.items) do
-            if item[1] ~= bf then item[1]:SetSize(size * item[2], size * item[2]) end
+            if item.tex then
+                local t = item.tex
+                t:SetSize(item.w * size, (item.h or item.w) * size)
+                t:ClearAllPoints()
+                local px = (item.x or 0) * width + (item.dx or 0) * size
+                local py = (item.y or 0) * height + (item.dy or 0) * size
+                local rot, flip = item.rot or 0, item.flip
+                if self.round then
+                    -- what stood on the edge of the rectangle now stands on the rim of the circle (icicles turn to point out)
+                    local rx, ry = item.x or 0, item.y or 0
+                    local m = math.max(math.abs(rx), math.abs(ry))
+                    if m >= 0.49 then
+                        local len = math.sqrt(rx * rx + ry * ry)
+                        local ux, uy = rx / len, ry / len
+                        px, py = ux * m * size, uy * m * size
+                        if item.radial then
+                            local out = (item.h or item.w) / 2 - 0.06
+                            px, py = px + ux * out * size, py + uy * out * size
+                            rot = math.atan2(ux, -uy)
+                            flip = false
+                        elseif item.dist and item.dist < 0 then
+                            px, py = px + ux * 0.08 * size, py + uy * 0.08 * size   -- a drop starts just outside the rim
+                        end
+                    end
+                end
+                if flip ~= nil then
+                    if flip then t:SetTexCoord(0, 1, 1, 0) else t:SetTexCoord(0, 1, 0, 1) end
+                end
+                if t.SetRotation then t:SetRotation(rot) end
+                t:SetPoint("CENTER", self, "CENTER", px, py)
+                if item.anim then item.anim:SetOffset(0, (item.dist or 0) * size) end
+            elseif item[1] ~= bf then
+                item[1]:SetSize(size * item[2], size * item[2])
+            end
         end
         for _, t in ipairs(st.steady) do t:Show() end
+        if noLight then
+            for _, t in ipairs(st.lights or {}) do t:Hide() end   -- the soft light of a themed effect is off
+        end
         for _, group in ipairs(st.loops) do group:Play() end
         -- the layer on the icon
         tint:SetVertexColor(st.tint[1], st.tint[2], st.tint[3], 1)
@@ -548,6 +823,7 @@ local function MakeFx(parent)
     -- the moment it turns on: the styles with a one-time flash play it
     function fx:Trigger()
         local st = self.styles[self.style or "sunburst"]
+        if not st then return end
         for _, o in ipairs(st.once or {}) do
             local region, group, delay = o[1], o[2], o[3] or 0
             local function go()
@@ -556,6 +832,15 @@ local function MakeFx(parent)
                 group:Play()
             end
             if delay > 0 then C_Timer.After(delay, go) else go() end
+        end
+    end
+    -- a round icon: the tint, the glint and the flash on the icon are cut to the circle as well
+    local roundMask = top:CreateMaskTexture()
+    roundMask:SetTexture(FX_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    roundMask:SetAllPoints(top)
+    function fx:SetRound(on)
+        for _, region in ipairs({ tint, g1, g2, bf }) do
+            if on then region:AddMaskTexture(roundMask) else region:RemoveMaskTexture(roundMask) end
         end
     end
     return fx
@@ -571,8 +856,17 @@ local function MakeExtraFace(parent)
     I2:SetAllPoints(B2)
     local tex = I2:CreateTexture(nil, "ARTWORK")
     tex:SetAllPoints(I2)
+    local mask = I2:CreateMaskTexture()
+    mask:SetTexture(FX_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:SetAllPoints(I2)
     local cd = CreateFrame("Cooldown", nil, I2, "CooldownFrameTemplate")
     cd:SetAllPoints(I2)
+    local RIM = CreateFrame("Frame", nil, B2)   -- the rim of a round icon, above the picture
+    RIM:SetAllPoints(B2)
+    RIM:SetFrameLevel(I2:GetFrameLevel() + 3)
+    local rim = RIM:CreateTexture(nil, "ARTWORK")
+    rim:SetPoint("CENTER", RIM, "CENTER")
+    rim:Hide()
     local GL = CreateFrame("Frame", nil, B2)
     GL:SetAllPoints(B2)
     local glow = GL:CreateTexture(nil, "OVERLAY")
@@ -600,7 +894,7 @@ local function MakeExtraFace(parent)
     squeeze:SetDuration(0.5)
     squeeze:SetSmoothing("IN_OUT")
     return { B = B2, I = I2, tex = tex, cd = cd, GL = GL, glow = glow, pulse = pulse, iconPulse = iconPulse,
-        fx = MakeFx(B2) }
+        fx = MakeFx(B2), mask = mask, RIM = RIM, rim = rim }
 end
 
 local function CreateIndicator()
@@ -663,8 +957,17 @@ local function CreateIndicator()
     local tex = I:CreateTexture(nil, "ARTWORK")
     tex:SetAllPoints(I)
 
+    local mask = I:CreateMaskTexture()
+    mask:SetTexture(FX_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:SetAllPoints(I)
     local cd = CreateFrame("Cooldown", nil, I, "CooldownFrameTemplate")
     cd:SetAllPoints(I)
+    local RIM = CreateFrame("Frame", nil, B)   -- the rim of a round icon, above the picture
+    RIM:SetAllPoints(B)
+    RIM:SetFrameLevel(I:GetFrameLevel() + 3)
+    local rim = RIM:CreateTexture(nil, "ARTWORK")
+    rim:SetPoint("CENTER", RIM, "CENTER")
+    rim:Hide()
 
     -- Glow: a pulsing golden ring around the icon. It is part of B, so it appears and
     -- disappears together with the icon (no extra condition needed).
@@ -710,7 +1013,7 @@ local function CreateIndicator()
     ind.R = R
     ind.faces = {
         { B = B, I = I, tex = tex, cd = cd, GL = GL, glow = glow, pulse = pulse, iconPulse = iconPulse,
-            fx = MakeFx(B) },
+            fx = MakeFx(B), mask = mask, RIM = RIM, rim = rim },
         MakeExtraFace(R),
     }
 
@@ -725,7 +1028,8 @@ local function CreateIndicator()
     ind.G, ind.H, ind.J = G, H, J
     ind.M, ind.P, ind.S = M, P, S
     ind.parts = { A, C, E, F, G, H, J, M, P, S, B, I, cd, R, ind.faces[2].B, ind.faces[2].I, ind.faces[2].cd,
-        ind.faces[1].fx, ind.faces[2].fx, ind.faces[1].fx.top, ind.faces[2].fx.top }   -- every frame of the indicator (for the layer setting)
+        ind.faces[1].fx, ind.faces[2].fx, ind.faces[1].fx.top, ind.faces[2].fx.top,
+        ind.faces[1].RIM, ind.faces[2].RIM }   -- every frame of the indicator (for the layer setting)
 
     A:SetScript("OnDragStart", function(self)
         if not (ind.editing or ind.preview) then return end
@@ -804,9 +1108,89 @@ local function ShowRulesAllow(cfg, ind)
     if not combatNow and cfg.lingerEnabled and ind and ind.lingerUntil and GetTime() < ind.lingerUntil then
         combatNow = true
     end
+    -- the group and the place work as lists: any ticked one allows; none ticked = no restriction
+    local groupOk = true
+    if rules.solo or rules.inparty or rules.inraid then
+        local group = IsInRaid() and "inraid" or (IsInGroup() and "inparty" or "solo")
+        groupOk = rules[group] and true or false
+    end
+    local placeOk = true
+    if rules.world or rules.dungeon or rules.raidinst or rules.delve or rules.pvp then
+        local _, instanceType = IsInInstance()
+        local place = ({ none = "world", party = "dungeon", raid = "raidinst", scenario = "delve",
+                         pvp = "pvp", arena = "pvp" })[instanceType or "none"] or "world"
+        placeOk = rules[place] and true or false
+    end
     return pair("combat", "out", combatNow)
         and pair("mounted", "unmounted", mounted)
         and pair("vehicle", "novehicle", inVehicle)
+        and pair("stealth", "nostealth", IsStealthed() and true or false)
+        and groupOk and placeOk
+end
+
+-- The conditions about you (form) and your target (enemy / friendly, player / NPC, boss / rare / elite /
+-- normal, alive / dead, attacking me) are all plain readable facts of the game, so they are checked here
+-- with ordinary ifs. A reading the game hides counts as "not met". While "keep it after combat" runs, the
+-- conditions about the target are ignored (the target is gone), like the enemy health.
+local function TargetKinds()
+    local ok, class = pcall(UnitClassification, "target")
+    if not ok or class == nil or issecretvalue(class) then return nil end
+    local okL, level = pcall(UnitLevel, "target")
+    if class == "worldboss" or (okL and not issecretvalue(level) and level == -1) then
+        return { boss = true }
+    end
+    if class == "rare" then return { rare = true } end
+    if class == "rareelite" then return { rare = true, elite = true } end
+    if class == "elite" then return { elite = true } end
+    return { normal = true }
+end
+
+local function ReadableConditionsMet(cfg, lingering)
+    if cfg.formEnabled then
+        local form = GetShapeshiftForm() or 0
+        local spell = 0
+        if form > 0 then
+            local _, _, _, id = GetShapeshiftFormInfo(form)
+            spell = id or 0
+        end
+        if spell ~= (cfg.formSpell or 0) then return false end
+    end
+    if lingering then return true end
+    if not (cfg.enemyAliveEnabled or cfg.tgtHostileEnabled or cfg.tgtTypeEnabled
+        or cfg.tgtClassEnabled or cfg.threatEnabled) then
+        return true
+    end
+    if not UnitExists("target") then return false end
+    if cfg.tgtHostileEnabled then
+        local hostile = UnitCanAttack("player", "target") and true or false
+        if hostile ~= (cfg.tgtHostile ~= "friend") then return false end
+    end
+    if cfg.tgtTypeEnabled then
+        local ok, isPlayer = pcall(UnitIsPlayer, "target")
+        if not ok or issecretvalue(isPlayer) then return false end
+        if (isPlayer and true or false) ~= (cfg.tgtType == "player") then return false end
+    end
+    if cfg.enemyAliveEnabled then
+        local ok, dead = pcall(UnitIsDead, "target")
+        if not ok or issecretvalue(dead) then return false end
+        if (cfg.enemyAlive == "no") ~= (dead and true or false) then return false end
+    end
+    if cfg.tgtClassEnabled then
+        local kinds = TargetKinds()
+        local rules = cfg.tgtClass or {}
+        local hit = false
+        for kind in pairs(kinds or {}) do
+            if rules[kind] then hit = true end
+        end
+        if not hit then return false end
+    end
+    if cfg.threatEnabled then
+        local ok, status = pcall(UnitThreatSituation, "player", "target")
+        if not ok or issecretvalue(status) then return false end
+        local attacking = status ~= nil and status >= 2
+        if (cfg.threatState ~= "no") ~= attacking then return false end
+    end
+    return true
 end
 
 -- Switch the "Empowered effect" of a face on or off. Turning it on plays the one-time flash of the
@@ -864,16 +1248,7 @@ local function SoundConditionsMet(cfg, ind)
         if not okU or issecretvalue(usable) or not usable then return false end
     end
     local lingering = cfg.lingerEnabled and not inCombat and ind.lingerUntil and GetTime() < ind.lingerUntil
-    if cfg.enemyAliveEnabled and not lingering then
-        local met = false
-        if UnitExists("target") and UnitCanAttack("player", "target") then
-            local okDead, dead = pcall(UnitIsDead, "target")
-            if okDead and not issecretvalue(dead) then
-                met = (cfg.enemyAlive == "no") == (dead and true or false)
-            end
-        end
-        if not met then return false end
-    end
+    if not ReadableConditionsMet(cfg, lingering) then return false end
     if cfg.secEnabled and ind.secType then
         local count = SecondaryCount(ind.secType)
         if count == nil or not Compare(count, cfg.secOp, cfg.secValue or 1) then return false end
@@ -1047,18 +1422,7 @@ local function UpdateVisual(ind)
             SetFx(ind.faces[2], false)
         end
         -- "the enemy (my target) is alive / dead": needs a hostile target; none = not met
-        if cfg.enemyAliveEnabled and not lingering then
-            local met = false
-            if UnitExists("target") and UnitCanAttack("player", "target") then
-                local okDead, dead = pcall(UnitIsDead, "target")
-                if okDead and not issecretvalue(dead) then
-                    met = (cfg.enemyAlive == "no") == (dead and true or false)
-                end
-            end
-            J:SetAlpha(met and 1 or 0)
-        else
-            J:SetAlpha(1)
-        end
+        J:SetAlpha(ReadableConditionsMet(cfg, lingering) and 1 or 0)
         -- "the ability is available": the cost part is the C frame above; here the cooldown part
         -- (the global cooldown is ignored, a charge left counts as available)
         if cfg.availEnabled and ind.cdDuration then
@@ -1094,6 +1458,24 @@ function Update(ind)
 end
 
 -- Rebuild everything that depends on the aura's settings.
+-- the Empowered effect an aura really has: "auto" follows the specialization of the aura (the one it belongs
+-- to, or else the one played now)
+function HeadsUp_ResolveFx(cfg)
+    local style = cfg.empowerFx
+    if style == "auto" then
+        local spec = currentSpec
+        if cfg.specs then
+            local only, count = nil, 0
+            for id, on in pairs(cfg.specs) do
+                if on then only, count = id, count + 1 end
+            end
+            if count == 1 then spec = only end
+        end
+        style = SPEC_FX[spec] or "sunburst"
+    end
+    return style
+end
+
 local function ApplyConfig(ind)
     local cfg = ind.cfg
     if not cfg then
@@ -1103,13 +1485,34 @@ local function ApplyConfig(ind)
     end
     local width, height = cfg.width, cfg.height
     local big = math.max(width, height)   -- rings and effects are round: they follow the longer side
+    local round = cfg.shape == "round"
+    if round then width, height = big, big end   -- a circle: as wide as high
     ind.A:SetSize(width, height)
     ApplyPosition(ind)
     local effect = cfg.effect or "none"
     local strata = STRATA[cfg.layer] or STRATA[3]
+    -- the look of the effect: "auto" follows the specialization of the aura (the one it belongs to, else the one played now)
+    local fxStyle = HeadsUp_ResolveFx(cfg)
     for _, face in ipairs(ind.faces) do   -- the main icon and the "always when empowered" one look the same
-        -- glow ring (the artwork is about 1.75x the size of the icon it surrounds)
-        face.glow:SetSize(big * 1.75, big * 1.75)
+        -- the shape: a round icon is the picture cut to a circle, a round cooldown, a rim of the style of the effect
+        if round then
+            face.tex:AddMaskTexture(face.mask)
+            face.cd:SetUseCircularEdge(true)
+            face.cd:SetSwipeTexture(FX_MASK)
+            face.rim:SetTexture(RIM_BY_STYLE[fxStyle] or RIM_GOLD)
+            face.rim:SetSize(big * 1.3, big * 1.3)
+            face.rim:Show()
+            face.glow:SetTexture(FX_RINGGLOW)
+        else
+            face.tex:RemoveMaskTexture(face.mask)
+            face.cd:SetUseCircularEdge(false)
+            face.cd:SetSwipeTexture(FX_WHITE)
+            face.rim:Hide()
+            face.glow:SetTexture(FX_RING)
+        end
+        -- glow ring (the artwork of the square one is about 1.75x the size of the icon it surrounds)
+        local ringSize = round and 1.5 or 1.75
+        face.glow:SetSize(big * ringSize, big * ringSize)
         if effect == "none" then
             face.pulse:Stop()
             face.iconPulse:Stop()
@@ -1176,7 +1579,10 @@ local function ApplyConfig(ind)
             face.tex:SetTexture(picture)
             face.tex:SetTexCoord(left, right, top, bottom)
         end
-        for _, face in ipairs(ind.faces) do face.fx:Apply(cfg.empowerFx, big, width, height) end
+        for _, face in ipairs(ind.faces) do
+            face.fx:Apply(fxStyle, big, width, height, round, cfg.empowerLight == "off")
+            face.fx:SetRound(round)
+        end
         ResetFx(ind)
         local costs = C_Spell.GetSpellPowerCost(cfg.spellID)
         if costs then
@@ -1305,8 +1711,8 @@ function HeadsUp_IsDirty()
                     if (a[id] and true or false) ~= (on and true or false) then return true end
                 end
             end
-        elseif k == "showRules" then
-            local a, b = draft.showRules or {}, saved.showRules or {}
+        elseif k == "showRules" or k == "tgtClass" then
+            local a, b = draft[k] or {}, saved[k] or {}
             for rule, on in pairs(a) do
                 if (b[rule] and true or false) ~= (on and true or false) then return true end
             end
@@ -1348,7 +1754,12 @@ function HeadsUp_DebugState()
             local on = {}
             if a.healthEnabled then on[#on + 1] = "health" end
             if a.enemyEnabled then on[#on + 1] = "enemyHealth" end
-            if a.enemyAliveEnabled then on[#on + 1] = "enemyAlive" end
+            if a.enemyAliveEnabled then on[#on + 1] = "targetAlive" end
+            if a.formEnabled then on[#on + 1] = "form" end
+            if a.tgtHostileEnabled then on[#on + 1] = "targetEnemyFriendly" end
+            if a.tgtTypeEnabled then on[#on + 1] = "targetPlayerNpc" end
+            if a.tgtClassEnabled then on[#on + 1] = "targetCategory" end
+            if a.threatEnabled then on[#on + 1] = "targetAttackingMe" end
             if a.availEnabled then on[#on + 1] = "available" end
             if a.powerEnabled then on[#on + 1] = "resource" end
             if a.secEnabled then on[#on + 1] = "secondResource" end
@@ -1678,6 +2089,11 @@ local function OnEvent(_, event, arg1, arg2, arg3)
                 if sound.key == a.soundKey then known = true end
             end
             if not known then a.soundKey = "ding" end
+            -- "Enemy is alive" used to need a hostile target by itself: it is now the separate row "Target is an enemy"
+            if a.enemyAliveEnabled and a.tgtHostileEnabled == nil then
+                a.tgtHostileEnabled = true
+                a.tgtHostile = "enemy"
+            end
             FillDefaults(a)
             local ind = GetPooled(i)
             ind.cfg = a
@@ -1693,7 +2109,7 @@ local function OnEvent(_, event, arg1, arg2, arg3)
         RefreshCurrentSpec()
     end
     if event == "PLAYER_ENTERING_WORLD" or event == "UNIT_MAXPOWER" or event == "PLAYER_TALENT_UPDATE"
-        or event == "UNIT_DISPLAYPOWER" then
+        or event == "UNIT_DISPLAYPOWER" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         ForEachIndicator(ApplyConfig)
         return
     end
@@ -1724,6 +2140,10 @@ driver:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
 driver:RegisterUnitEvent("UNIT_MAXPOWER", "player")
 driver:RegisterUnitEvent("UNIT_DISPLAYPOWER", "player")   -- the main resource changed (druid forms)
 driver:RegisterEvent("RUNE_POWER_UPDATE")
+driver:RegisterEvent("UPDATE_SHAPESHIFT_FORM")   -- the form changed (druid...)
+driver:RegisterEvent("GROUP_ROSTER_UPDATE")      -- solo / party / raid changed
+driver:RegisterEvent("UPDATE_STEALTH")
+driver:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 driver:SetScript("OnEvent", OnEvent)
 
 -- A cooldown running out fires no event, so auras with a cooldown condition are
@@ -1786,7 +2206,9 @@ driver:SetScript("OnUpdate", function(_, elapsed)
     ForEachIndicator(function(ind)
         local cfg = ind.cfg
         if cfg and (cfg.cdEnabled or cfg.chargesEnabled or cfg.suppressEnabled or cfg.buffEnabled
-            or cfg.lingerEnabled or cfg.availEnabled or cfg.secEnabled or cfg.soundEnabled)
+            or cfg.lingerEnabled or cfg.availEnabled or cfg.secEnabled or cfg.soundEnabled
+            or cfg.formEnabled or cfg.tgtHostileEnabled or cfg.tgtTypeEnabled or cfg.tgtClassEnabled
+            or cfg.threatEnabled or cfg.showWhenEnabled)
             and ind.A:IsShown() then
             Update(ind)
         end
@@ -1832,6 +2254,11 @@ SlashCmdList.HEADSUP = function(msg)
         HeadsUp_Why()
     elseif msg == "soundtest" then
         HeadsUp_SoundTest()
+    elseif msg == "survey off" or msg == "survey on" then
+        -- the recorders (Survey.lua, Survey2.lua) start at the next /reload only when this is "on"
+        HeadsUpDB.surveyOff = (msg == "survey off") or nil
+    elseif msg == "scan" then
+        if HeadsUp_ScanCatalog then HeadsUp_ScanCatalog(true) end
     elseif msg == "minimap" then
         if HeadsUp_ToggleMinimapButton then HeadsUp_ToggleMinimapButton() end
     else
