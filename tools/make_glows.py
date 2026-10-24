@@ -1,5 +1,5 @@
 """
-Builds HeadsUp/KnownGlows.lua: which abilities can "light up" (proc glow), per class, and which
+Builds HeadsUpAuras/KnownGlows.lua: which abilities can "light up" (proc glow), per class, and which
 buffs make them light up. The data is the game's own, from the public wago.tools tables:
 
   SpellActivationOverlay : buff (SpellID) -> mask of the spell families to highlight
@@ -22,7 +22,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "cache")
-OUT = os.path.join(HERE, "..", "HeadsUp", "KnownGlows.lua")
+OUT = os.path.join(HERE, "..", "HeadsUpAuras", "KnownGlows.lua")
 BASE = "https://wago.tools/db2/%s/csv"
 MASK32 = 0xFFFFFFFF
 
@@ -74,11 +74,11 @@ def main():
             by_class.setdefault(token, {}).setdefault(spell, set()).add(aura)
 
     lines = [
-        "-- HeadsUp: abilities that can light up (proc glow), per class, and the buffs that make them",
+        "-- HeadsUp Auras: abilities that can light up (proc glow), per class, and the buffs that make them",
         "-- light up. MADE BY tools/make_glows.py FROM THE GAME'S OWN DATA: do not edit by hand.",
-        "-- Made on %s. Format: HeadsUpGlows[CLASS][ability id] = { buff id, buff id, ... }" % datetime.date.today(),
+        "-- Made on %s. Format: HeadsUpAurasGlows[CLASS][ability id] = { buff id, buff id, ... }" % datetime.date.today(),
         "",
-        "HeadsUpGlows = {",
+        "HeadsUpAurasGlows = {",
     ]
     total = 0
     for token in sorted(by_class):

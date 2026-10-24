@@ -1,11 +1,11 @@
--- HeadsUp: settings window.
+-- HeadsUp Auras: settings window.
 -- A wizard: the list of saved auras on the left, and on the right one step at a time
 -- (Aura -> Conditions -> Ability -> Situation). The pieces (cards, rows, controls) are in UI.lua.
 --
 -- To add an option: find the card it belongs to in one of the Build...Page functions and add a line
 -- (card:Condition or card:Field). A new group of options = a new card. A new step = a new entry in STEPS.
 
-local UI = HeadsUpUI
+local UI = HeadsUpAurasUI
 local C, L = UI.C, UI.L
 
 ------------------------------------------------------------
@@ -72,7 +72,7 @@ end
 local function SuggestedDuration(spellID)
     -- the game's own data first (KnownDurations.lua, made by tools/make_durations.py): the effect the ability leaves on an enemy
     local info = C_Spell.GetSpellInfo(spellID)
-    local known = info and HeadsUpDurations and HeadsUpDurations[select(2, UnitClass("player"))]
+    local known = info and HeadsUpAurasDurations and HeadsUpAurasDurations[select(2, UnitClass("player"))]
     known = known and known[info.name]
     if known then return math.min(math.max(math.floor(known[1] + 0.5), 1), 300), true end
     local desc = C_Spell.GetSpellDescription(spellID)
@@ -123,14 +123,14 @@ end
 
 -- Has the addon seen this aura's ability light up (for the current class + spec)?
 local function AbilityLearned(spellID)
-    return spellID ~= nil and HeadsUp_GetLearned()[spellID] ~= nil
+    return spellID ~= nil and HeadsUpAuras_GetLearned()[spellID] ~= nil
 end
 
 -- The buffs that can make an ability light up (KnownGlows.lua: made from the game's own data by
 -- tools/make_glows.py). nil when the ability is not in the list. The addon cannot see buffs in combat,
 -- so it cannot tell which of them lit the ability: the names are information.
 local function KnownSources(spellID)
-    local forClass = HeadsUpGlows and HeadsUpGlows[HeadsUp_GetPlayerClass()]
+    local forClass = HeadsUpAurasGlows and HeadsUpAurasGlows[HeadsUpAuras_GetPlayerClass()]
     return forClass and spellID and forClass[spellID] or nil
 end
 
@@ -335,7 +335,7 @@ local WIN_W, WIN_H = 730, 520
 local PADDING = math.floor((WIN_W - LIST_W - 1 - L.PAGE_W) / 2)
 local MAIN_W = WIN_W - LIST_W - 1
 
-local frame = UI.Box(UIParent, C.window, C.borderHi, "Frame", "HeadsUpSettings")
+local frame = UI.Box(UIParent, C.window, C.borderHi, "Frame", "HeadsUpAurasSettings")
 frame:SetSize(WIN_W, WIN_H)
 frame:SetPoint("CENTER")
 frame:SetMovable(true)
@@ -346,7 +346,7 @@ frame:SetScript("OnDragStart", frame.StartMoving)
 frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 frame:SetFrameStrata("DIALOG")
 frame:Hide()
-tinsert(UISpecialFrames, "HeadsUpSettings")   -- Esc closes it
+tinsert(UISpecialFrames, "HeadsUpAurasSettings")   -- Esc closes it
 
 function UI.IsOpen() return frame:IsShown() end
 
@@ -364,15 +364,15 @@ headerLine:SetPoint("BOTTOMRIGHT")
 headerLine:SetHeight(1)
 headerLine:SetColorTexture(unpack(C.border))
 
--- the version is the one written in HeadsUp.toc (by hand: for example "1.1 beta")
-local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("HeadsUp", "Version") or "1.1 beta"
+-- the version is the one written in HeadsUpAuras.toc (by hand: for example "1.2 beta")
+local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("HeadsUpAuras", "Version") or "1.2 beta"
 -- where the players are asked to send their feedback: the CurseForge page of the addon.
--- (It works once the project exists with the name HeadsUp on CurseForge: change the address if it differs.)
-local FEEDBACK_URL = "https://www.curseforge.com/wow/addons/headsup"
+-- (It works once the project exists with the name HeadsUp Auras on CurseForge: change the address if it differs.)
+local FEEDBACK_URL = "https://www.curseforge.com/wow/addons/headsup-auras"
 
 local titleText = UI.Text(header, 18, C.accent)
 titleText:SetPoint("LEFT", header, "LEFT", 18, 0)
-titleText:SetText("HeadsUp")
+titleText:SetText("HeadsUp Auras")
 
 local versionText = UI.Text(header, 11, C.muted)
 versionText:SetPoint("LEFT", titleText, "RIGHT", 6, -2)
@@ -403,7 +403,7 @@ feedbackFade:SetDuration(0.8)
 feedbackFade:SetSmoothing("IN_OUT")
 
 local function UpdateFeedbackButton()
-    local seen = HeadsUpDB and HeadsUpDB.feedbackSeen
+    local seen = HeadsUpAurasDB and HeadsUpAurasDB.feedbackSeen
     feedbackButton.primary = not seen
     feedbackButton.label:SetText(seen and "Feedback" or "Send feedback")
     feedbackButton:SetWidth(seen and 90 or 116)
@@ -432,7 +432,7 @@ feedbackBody:SetWordWrap(true)
 feedbackBody:SetJustifyV("TOP")
 feedbackBody:SetPoint("TOPLEFT", feedbackTitle, "BOTTOMLEFT", 0, -10)
 feedbackBody:SetWidth(388)
-feedbackBody:SetText("HeadsUp is in beta, and your feedback is very important to us. Tell us what problem you ran into, what you need, or which ability did not work well, so that we can make it better.")
+feedbackBody:SetText("HeadsUp Auras is in beta, and your feedback is very important to us. Tell us what problem you ran into, what you need, or which ability did not work well, so that we can make it better.")
 
 local feedbackWhere = UI.Text(feedbackPanel, 11, C.muted)
 feedbackWhere:SetPoint("BOTTOMLEFT", feedbackPanel, "BOTTOMLEFT", 16, 82)
@@ -463,14 +463,14 @@ feedbackButton:SetScript("OnClick", function()
         return
     end
     feedbackPanel:Show()
-    if HeadsUpDB then HeadsUpDB.feedbackSeen = true end   -- from now on a small, plain button
+    if HeadsUpAurasDB then HeadsUpAurasDB.feedbackSeen = true end   -- from now on a small, plain button
     UpdateFeedbackButton()
 end)
 
--- "Important info": why the game hides things in combat, and what HeadsUp does about it (left of Feedback)
+-- "Important info": why the game hides things in combat, and what HeadsUp Auras does about it (left of Feedback)
 local infoButton = UI.Button(header, "Important info", 108)
 infoButton:SetPoint("RIGHT", feedbackButton, "LEFT", -8, 0)
-UI.Tip(infoButton, Tip("Important info", "Why some things work differently in combat, and what HeadsUp does about it."))
+UI.Tip(infoButton, Tip("Important info", "Why some things work differently in combat, and what HeadsUp Auras does about it."))
 
 local infoPanel = UI.Box(frame, C.window, C.accent)
 infoPanel:SetSize(470, 236)
@@ -485,7 +485,7 @@ infoTitle:SetText("Why some things work differently in combat")
 
 local INFO_PARAGRAPHS = {
     "Since patch 12.0 (Midnight), Blizzard hides a lot of information from add-ons while you are in combat, for example the buffs and debuffs on you and on your enemy.",
-    "HeadsUp does its best to make things work anyway, and keeps looking for smarter ways around these limits. But the limits are real, so in some cases the result can be inaccurate.",
+    "HeadsUp Auras does its best to make things work anyway, and keeps looking for smarter ways around these limits. But the limits are real, so in some cases the result can be inaccurate.",
     "If something does not look right, please tell us with the Feedback button: it helps us find better ways.",
 }
 local infoBody = UI.Text(infoPanel, 12, C.text)
@@ -561,13 +561,13 @@ local ICONS_PER_PAGE = ICON_COLS * ICON_ROWS
 local iconList, iconPage = {}, 1
 local pickerButtons = {}
 
-local picker = UI.Box(frame, C.window, C.borderHi, "Frame", "HeadsUpIconPicker")
+local picker = UI.Box(frame, C.window, C.borderHi, "Frame", "HeadsUpAurasIconPicker")
 picker:SetSize(ICON_COLS * ICON_CELL + 28, 36 + ICON_ROWS * ICON_CELL + 56)
 picker:SetPoint("TOPRIGHT", frame, "TOPLEFT", -6, 0)
 picker:EnableMouse(true)
 picker:EnableMouseWheel(true)
 picker:Hide()
-tinsert(UISpecialFrames, "HeadsUpIconPicker")
+tinsert(UISpecialFrames, "HeadsUpAurasIconPicker")
 
 local pickerTitle = UI.Text(picker, 13, C.accent)
 pickerTitle:SetPoint("TOPLEFT", 14, -11)
@@ -650,7 +650,7 @@ for i = 1, ICONS_PER_PAGE do
     btn:SetScript("OnEnter", function(self) self.hl:Show() end)
     btn:SetScript("OnLeave", function(self) self.hl:Hide() end)
     btn:SetScript("OnClick", function(self)
-        local d = HeadsUp_GetDraft()
+        local d = HeadsUpAuras_GetDraft()
         if d then
             d.icon = self.icon
             UI.Changed()
@@ -673,7 +673,7 @@ PickerNav(">>", 140, 10)
 local useOwnIcon = UI.Button(picker, "Ability icon", 110)
 useOwnIcon:SetPoint("BOTTOMRIGHT", picker, "BOTTOMRIGHT", -14, 14)
 useOwnIcon:SetScript("OnClick", function()
-    local d = HeadsUp_GetDraft()
+    local d = HeadsUpAuras_GetDraft()
     if d then
         d.icon = nil
         UI.Changed()
@@ -731,7 +731,7 @@ local KIND_SUFFIX = { ability = "", tracker = " Tracker", counter = "" }
 
 -- { seconds, "enemy" or "self" } for an ability whose effect we know (KnownDurations.lua), else nil
 local function KnownDuration(name)
-    local byClass = HeadsUpDurations and HeadsUpDurations[select(2, UnitClass("player"))]
+    local byClass = HeadsUpAurasDurations and HeadsUpAurasDurations[select(2, UnitClass("player"))]
     return byClass and byClass[name]
 end
 
@@ -781,11 +781,11 @@ local function SetKind(d, kind)
             "suppressEnabled", "suppressReset" }) do
             d[key] = false
         end
-        d.otherAuras, d.trackShow = nil, "hide"
+        d.otherAuras, d.trackShow, d.buffIgnore = nil, "hide", {}
         d.shape, d.effect = "text", "none"
         d.width, d.height, d.sizeLinked = 200, 24, false   -- (the size of a bar; the text of a counter sizes itself)
         d.ctBg, d.ctBgAlpha, d.ctSize, d.ctColor = { 0, 0, 0 }, 20, 12, { 1, 1, 1 }
-        d.ctWho, d.ctChar = "all", HeadsUp_CharKey()   -- (a counter is for every character, until it is set otherwise)
+        d.ctWho, d.ctChar = "all", HeadsUpAuras_CharKey()   -- (a counter is for every character, until it is set otherwise)
         d.spellID, d.itemID, d.currencyID, d.icon, d.name = nil, nil, nil, nil, nil
         d.ctType, d.ctBank = "item", false
         UI.Changed()
@@ -808,6 +808,7 @@ local function SetKind(d, kind)
             "availEnabled", "buffEnabled", "buffAlways", "soundEnabled" }) do
             d[key] = false
         end
+        d.buffIgnore = {}
         d.suppressEnabled, d.trackShow = true, "while"
         d.shape, d.effect = "square", "none"
         d.width, d.height, d.sizeLinked = 50, 50, true
@@ -835,7 +836,7 @@ local function SelectAbility(d, a)
     local isAuto = not d.name or (prev and (current == prev.name or current == prev.name .. " Tracker"))
     if isAuto then
         -- suggest a name that is not used yet: "Death Strike 2" if needed
-        d.name = HeadsUp_UniqueName(a.name .. (KIND_SUFFIX[d.kind or "ability"] or ""), HeadsUp_GetEditIndex())
+        d.name = HeadsUpAuras_UniqueName(a.name .. (KIND_SUFFIX[d.kind or "ability"] or ""), HeadsUpAuras_GetEditIndex())
     end
     d.spellID = a.id
     -- a condition that makes no sense for this ability is switched off
@@ -896,35 +897,45 @@ end
 
 -- what a counter counts: the name and the picture of what is chosen (nil name = nothing chosen yet)
 local function CounterItem(d)
-    local id = d and HeadsUp_SubjectID(d)
+    local id = d and HeadsUpAuras_SubjectID(d)
     if not id then return nil end
-    local name, icon = HeadsUp_SubjectFacts(d)
+    local name, icon = HeadsUpAuras_SubjectFacts(d)
     return name or ((d.ctType == "currency" and "Currency " or "Item ") .. id), icon
+end
+
+-- the name an aura gets from its item: the name of the item, and its quality ("Imbued Bright Linen Bolt Q2"), because the
+-- same name can be several items, one for each quality
+local function ItemAutoName(id)
+    local name = id and HeadsUpAuras_ItemFacts(id)
+    if not name then return nil end
+    local q = HeadsUpAuras_ItemQuality(id)
+    return q and (name .. " Q" .. q) or name
 end
 
 -- choose the item of a counter: its name and its picture become the name and the picture of the aura
 local function SelectItem(d, id)
-    local prevName = (d.ctType ~= "currency") and d.itemID and HeadsUp_ItemFacts(d.itemID)
+    local prevName = (d.ctType ~= "currency") and d.itemID and ItemAutoName(d.itemID)
     local current = d.name and (d.name:gsub("%s+%d+$", ""))
     local isAuto = not d.name or (prevName and current == prevName)
     d.ctType, d.currencyID = "item", nil
     d.itemID = id
     d.itemUnknown = nil
     d.spellID = 0   -- (a counter has no spell: 0 only says that the aura has its subject)
-    local name, icon = HeadsUp_ItemFacts(id)
+    local name, icon = HeadsUpAuras_ItemFacts(id)
     d.icon = icon
     if isAuto then
-        d.name = name and HeadsUp_UniqueName(name, HeadsUp_GetEditIndex()) or nil
+        local auto = ItemAutoName(id)
+        d.name = auto and HeadsUpAuras_UniqueName(auto, HeadsUpAuras_GetEditIndex()) or nil
     end
     -- the name of an item that the game does not know yet arrives a moment later
     if not name and Item and Item.CreateFromItemID then
         Item:CreateFromItemID(id):ContinueOnItemLoad(function()
-            local draft = HeadsUp_GetDraft()
+            local draft = HeadsUpAuras_GetDraft()
             if draft and draft.itemID == id then
                 if not draft.name then
-                    draft.name = HeadsUp_UniqueName(HeadsUp_ItemFacts(id) or ("Item " .. id), HeadsUp_GetEditIndex())
+                    draft.name = HeadsUpAuras_UniqueName(ItemAutoName(id) or ("Item " .. id), HeadsUpAuras_GetEditIndex())
                 end
-                draft.icon = select(2, HeadsUp_ItemFacts(id)) or draft.icon
+                draft.icon = select(2, HeadsUpAuras_ItemFacts(id)) or draft.icon
                 UI.Changed()
             end
         end)
@@ -934,7 +945,7 @@ end
 
 -- choose the currency of a counter (c = { id, name, icon })
 local function SelectCurrency(d, c)
-    local prevName = (d.ctType == "currency") and d.currencyID and HeadsUp_SubjectFacts(d) or nil
+    local prevName = (d.ctType == "currency") and d.currencyID and HeadsUpAuras_SubjectFacts(d) or nil
     local current = d.name and (d.name:gsub("%s+%d+$", ""))
     local isAuto = not d.name or (prevName and current == prevName)
     d.ctType, d.itemID = "currency", nil
@@ -942,7 +953,7 @@ local function SelectCurrency(d, c)
     d.itemUnknown = nil
     d.spellID = 0
     d.icon = c.icon
-    if isAuto then d.name = HeadsUp_UniqueName(c.name, HeadsUp_GetEditIndex()) end
+    if isAuto then d.name = HeadsUpAuras_UniqueName(c.name, HeadsUpAuras_GetEditIndex()) end
     UI.Changed()
 end
 
@@ -969,7 +980,7 @@ local function BuildCounterAuraPage(page)
                 set = function(d, text)
                     text = strtrim(text)
                     if text == "" then return end
-                    local kind, id = HeadsUp_ResolveSubject(text)
+                    local kind, id = HeadsUpAuras_ResolveSubject(text)
                     if kind == "item" then
                         if d.ctType == "currency" or id ~= d.itemID then SelectItem(d, id) end
                     elseif kind == "currency" then
@@ -1004,13 +1015,18 @@ local function BuildCounterAuraPage(page)
                     if d.itemUnknown then return "Not found: " .. d.itemUnknown .. " (type its id, or drag it onto the box)" end
                     local name = CounterItem(d)
                     if not name then return "Nothing chosen yet" end
-                    local ok, n = pcall(HeadsUp_ReadCount, d)
+                    local ok, n = pcall(HeadsUpAuras_ReadCount, d)
                     local count = "?"
                     if ok and type(n) == "number" and not issecretvalue(n) then
                         local okF, text = pcall(BreakUpLargeNumbers, n)
                         count = okF and text or n
                     end
-                    return name .. "  (" .. count .. ")"
+                    local mark = ""
+                    if d.ctType ~= "currency" then
+                        local q = HeadsUpAuras_ItemQuality(d.itemID)
+                        if q then mark = " " .. HeadsUpAuras_QualityMark(q, 14) end
+                    end
+                    return name .. mark .. "  (" .. count .. ")"
                 end,
                 onClick = function() end,
             },
@@ -1130,7 +1146,7 @@ local function BuildAuraPage(page, tracker, part, counter)
                 controls = { Choice("shape", SHAPES, "text", {
                     -- an icon starts at 40x40 and a bar at 200x24 (a size that was chosen is kept)
                     onPick = function(value)
-                        local d = HeadsUp_GetDraft()
+                        local d = HeadsUpAuras_GetDraft()
                         if not d then return end
                         if value == "square" or value == "round" then
                             if d.width ~= d.height then d.width, d.height, d.sizeLinked = 40, 40, true end
@@ -1210,7 +1226,7 @@ local function BuildAuraPage(page, tracker, part, counter)
             end, "square", {
                 -- a bar and an icon do not start with the same size
                 onPick = function(value)
-                    local d = HeadsUp_GetDraft()
+                    local d = HeadsUpAuras_GetDraft()
                     if d then
                         ApplyShapeSize(d, value)
                         UI.Changed()
@@ -1267,7 +1283,7 @@ local function BuildAuraPage(page, tracker, part, counter)
         })
 
         -- where it is on the screen: the distance of the icon's centre from the centre of the screen.
-        -- Dragging the icon with the mouse changes these numbers too (HeadsUp_PositionChanged below).
+        -- Dragging the icon with the mouse changes these numbers too (HeadsUpAuras_PositionChanged below).
         -- X and Y share the width of the wide fields above (ability, name): half each
         -- how far the centre may go so that the whole icon stays on the screen
         local function limits(d)
@@ -1293,16 +1309,16 @@ local function BuildAuraPage(page, tracker, part, counter)
             return {
                 type = "input", signed = true, maxLetters = 5, unit = unit, w = BOX_W, gap = (index == 1) and PAIR_GAP or 0,
                 tip = positionTip,
-                get = function() return math.floor((select(index, HeadsUp_GetPosition())) + 0.5) end,
+                get = function() return math.floor((select(index, HeadsUpAuras_GetPosition())) + 0.5) end,
                 set = function(d, v)
-                    local x, y = HeadsUp_GetPosition()
+                    local x, y = HeadsUpAuras_GetPosition()
                     local lx, ly = limits(d)
                     if index == 1 then
                         x = UI.Clamp(math.floor(v + 0.5), -lx, lx)
                     else
                         y = UI.Clamp(math.floor(v + 0.5), -ly, ly)
                     end
-                    HeadsUp_SetPosition(x, y)
+                    HeadsUpAuras_SetPosition(x, y)
                 end,
             }
         end
@@ -1366,7 +1382,7 @@ local function BuildAuraPage(page, tracker, part, counter)
             look:Field({
                 label = "Empowered light",
                 usable = function(d)
-                    local style = HeadsUp_ResolveFx(d)
+                    local style = HeadsUpAuras_ResolveFx(d)
                     return ForAbility(d) and (style == "frost" or style == "blood" or style == "poison")
                 end,
                 tip = Tip("Empowered light", "The soft coloured light behind a themed Empowered effect (Frost, Blood, Poison). Off: the effect keeps its icicles, splashes and bubbles but not the light, so the Show effect ring above can be the only glow.", "Show effect (the ring) and Empowered effect work independently: use both, one of them, or none."),
@@ -1403,16 +1419,16 @@ local function BuildConditionsPage(page)
     -- Death Knight, mana and holy power for a Paladin, ...)
     you:Condition({
         label = function()
-            local primary = HeadsUp_GetResources().primary
+            local primary = HeadsUpAuras_GetResources().primary
             return (primary and primary.name or "Resource") .. " is:"
         end,
         key = "powerEnabled",
         tip = Tip("Main resource", "Your main resource (Runic Power, Mana, Rage...): it follows your class.", "Mana is compared in percent, the others in points."),
-        usable = function(d) return ForAbility(d) and HeadsUp_GetResources().primary ~= nil end,
+        usable = function(d) return ForAbility(d) and HeadsUpAuras_GetResources().primary ~= nil end,
         controls = {
             Choice("powerOp", OP_LIST, "<"),
             Choice("powerValue", function()
-                local primary = HeadsUp_GetResources().primary
+                local primary = HeadsUpAuras_GetResources().primary
                 local list = {}
                 if primary and primary.percent then   -- mana: a percent
                     for v = 10, 100, 5 do list[#list + 1] = { value = v, text = v .. "%" } end
@@ -1427,16 +1443,16 @@ local function BuildConditionsPage(page)
     })
     you:Condition({
         label = function()
-            local second = HeadsUp_GetResources().secondary
+            local second = HeadsUpAuras_GetResources().secondary
             return second and (second.name .. ":") or "No second resource for your class"
         end,
         key = "secEnabled",
         tip = Tip("Second resource", "Your second resource, if your class has one: ready Runes, Holy Power, Combo Points, Soul Shards, Chi...", "It follows your class. The points you have right now are compared with the number you choose."),
-        usable = function(d) return ForAbility(d) and HeadsUp_GetResources().secondary ~= nil end,
+        usable = function(d) return ForAbility(d) and HeadsUpAuras_GetResources().secondary ~= nil end,
         controls = {
             Choice("secOp", OP_LIST, ">="),
             Choice("secValue", function()
-                local second = HeadsUp_GetResources().secondary
+                local second = HeadsUpAuras_GetResources().secondary
                 local list = {}
                 for v = 0, second and second.max or 5 do list[#list + 1] = { value = v, text = tostring(v) } end
                 return list
@@ -1640,7 +1656,7 @@ local function BuildAbilityPage(page)
         key = "buffEnabled",
         usable = empoweredUsable,
         tip = function(tt, d)
-            local seen = d and d.spellID and HeadsUp_GetLearned()[d.spellID]
+            local seen = d and d.spellID and HeadsUpAuras_GetLearned()[d.spellID]
             tt:AddLine("Empowered ability: active / not active", 1, 0.82, 0)
             tt:AddLine("Some buffs (like Dark Succor) empower an ability and make it glow.", 1, 1, 1, true)
             tt:AddLine("The aura looks at that glow on its own ability (works in combat).", 1, 1, 1, true)
@@ -1658,46 +1674,78 @@ local function BuildAbilityPage(page)
         end,
         controls = { Choice("buffState", BUFF_LIST, "active") },
     })
-    empowered:Condition({
-        label = "Ignore the resources",
-        key = "buffAlways",
-        indent = true,
-        -- only with "Empowered: active" ticked
-        usable = function(d)
-            return empoweredUsable(d) and d.buffEnabled and d.buffState ~= "gone" and true or false
-        end,
-        tip = function(tt)
-            tt:AddLine("Ignore the resources", 1, 0.82, 0)
-            tt:AddLine("When the ability lights up (empowered) it costs nothing, or is stronger, so it does not compete for your resources: the conditions about resources are ignored (the cost, the main resource, the second resource) and so is \"Combine with auras\" (the auras that share the same resources). Without the light, all conditions count as usual.", 1, 1, 1, true)
+    -- "Ignore while it lights up": one tick for each condition that the aura uses. While the ability is lit up the ticked conditions
+    -- do not count (the others do). Only the conditions the aura really has are listed.
+    local function ignoreUsable(d)
+        return empoweredUsable(d) and d.buffEnabled and d.buffState ~= "gone" and true or false
+    end
+    empowered:Field({
+        label = "Ignore while it lights up",
+        usable = ignoreUsable,
+        tip = function(tt, d)
+            tt:AddLine("Ignore while it lights up", 1, 0.82, 0)
+            tt:AddLine("When the ability lights up (empowered), tick the conditions that should not count any more. While it glows, the icon shows even if those conditions are not true. Every other condition still counts.", 1, 1, 1, true)
             tt:AddLine(" ")
-            tt:AddLine("Every other condition still counts: the number of enemies, your target, your health, the cooldown and charges, and where it shows (combat, mounted...).", 1, 1, 1, true)
+            tt:AddLine("Only the conditions this aura uses are listed. \"Show it only\" (combat, mounted...) and the specializations always count.", 1, 1, 1, true)
             tt:AddLine(" ")
-            tt:AddLine("Example: Final Verdict for one enemy, Divine Storm for several, and Word of Glory (heal) that has priority. While you need the heal, they wait; but if one of them lights up and is free, it shows anyway: it takes none of the resources of the heal.", 0.7, 0.7, 0.7, true)
+            tt:AddLine("Example: Death Strike with \"Your health below 80%\": tick \"Your health\" and it shows whenever it glows, even if your health is high. Leave it unticked and it shows only when it glows and your health is low.", 0.7, 0.7, 0.7, true)
         end,
+        controls = {
+            {
+                type = "dropdown",
+                text = function(d)
+                    local active = HeadsUpAuras_IgnoreActive(d)
+                    local n = 0
+                    for _ in pairs(active or {}) do n = n + 1 end
+                    return n == 0 and "Nothing" or (n .. " ticked")
+                end,
+                items = function(d)
+                    d.buffIgnore = d.buffIgnore or {}
+                    local items = {}
+                    for _, item in ipairs(HeadsUpAuras_IgnoreKeys) do
+                        if item.on(d) then
+                            items[#items + 1] = {
+                                text = item.label, keepOpen = true,
+                                selected = function() return d.buffIgnore[item.key] and true or false end,
+                                onClick = function()
+                                    d.buffIgnore[item.key] = (not d.buffIgnore[item.key]) or nil
+                                    UI.Changed()
+                                end,
+                            }
+                        end
+                    end
+                    if #items == 0 then items[1] = { text = "This aura has no other conditions", disabled = true } end
+                    return items
+                end,
+            },
+        },
     })
 
     -- A sound the moment the icon appears. It is an option of Empowered: the lighting up of the ability is one of the
     -- few things the game lets the addon read in combat. The game hides health, the main resource, cooldown and
     -- charges, so with those conditions the addon cannot know when the icon shows (unless the second icon of
     -- "Ignore the other conditions" does it).
-    local function hiddenConditions(d, ignoreResources)
+    local function hiddenConditions(d)
+        local active = HeadsUpAuras_IgnoreActive(d)
+        local function ig(key) return active and active[key] end
         local names = {}
-        if d.healthEnabled then names[#names + 1] = "your health" end
-        if d.enemyEnabled then names[#names + 1] = "enemy health" end
-        if d.powerEnabled and not ignoreResources then names[#names + 1] = "the main resource" end
+        if d.healthEnabled and not ig("health") then names[#names + 1] = "your health" end
+        if d.enemyEnabled and not ig("enemy") then names[#names + 1] = "enemy health" end
+        if d.powerEnabled and not ig("power") then names[#names + 1] = "the main resource" end
         local _, hasCooldown = Facts(d)
-        if d.availEnabled and hasCooldown then names[#names + 1] = "available (this ability has a cooldown)" end
-        if d.cdEnabled then names[#names + 1] = "cooldown" end
-        if d.chargesEnabled then names[#names + 1] = "charges" end
+        if d.availEnabled and hasCooldown and not ig("avail") then names[#names + 1] = "available (this ability has a cooldown)" end
+        if d.cdEnabled and not ig("cooldown") then names[#names + 1] = "cooldown" end
+        if d.chargesEnabled and not ig("charges") then names[#names + 1] = "charges" end
+        if d.otherAuras and d.otherAuras[1] and not ig("others") then names[#names + 1] = "the other auras it is combined with" end
         return names
     end
-    local function overrides(d) return d.buffEnabled and d.buffAlways and d.buffState ~= "gone" end
+    local function overrides(d) return HeadsUpAuras_IgnoreActive(d) ~= nil end
     local function soundUsable(d)
         if not (ForAbility(d) and d.buffEnabled and d.buffState ~= "gone") then return false end
-        return #hiddenConditions(d, overrides(d)) == 0 and true or false
+        return #hiddenConditions(d) == 0 and true or false
     end
     local soundList = {}
-    for _, item in ipairs(HeadsUpSounds) do soundList[#soundList + 1] = { value = item.key, text = item.text } end
+    for _, item in ipairs(HeadsUpAurasSounds) do soundList[#soundList + 1] = { value = item.key, text = item.text } end
 
     empowered:Condition({
         label = "Play a sound when it shows",
@@ -1708,19 +1756,19 @@ local function BuildAbilityPage(page)
             tt:AddLine("Play a sound when it shows", 1, 0.82, 0)
             tt:AddLine("A short sound the moment the icon appears because the ability is empowered. Choose the sound in the list: it plays once so you can hear it.", 1, 1, 1, true)
             tt:AddLine(" ")
-            tt:AddLine("With \"Ignore the resources\" it sounds when the ability lights up and the other conditions hold. Without it, it works only if the other conditions can be read in combat (the second resource, the enemy alive, \"available\" for an ability without a cooldown).", 0.7, 0.7, 0.7, true)
+            tt:AddLine("With conditions ticked in \"Ignore while it lights up\" it sounds when the ability lights up and the other conditions hold. Otherwise it works only if the other conditions can be read in combat (the second resource, the enemy alive, \"available\" for an ability without a cooldown).", 0.7, 0.7, 0.7, true)
             if d and d.buffEnabled and d.buffState ~= "gone" then
                 local names = hiddenConditions(d, overrides(d))
                 if #names > 0 then
                     tt:AddLine(" ")
-                    tt:AddLine("Not available now: the game hides " .. table.concat(names, ", ") .. " in combat. Remove them, or tick \"Ignore the resources\" if they are about resources.", 1, 0.5, 0.5, true)
+                    tt:AddLine("Not available now: the game hides " .. table.concat(names, ", ") .. " in combat. Remove them, or tick them in \"Ignore while it lights up\".", 1, 0.5, 0.5, true)
                 end
             end
         end,
         controls = { Choice("soundKey", soundList, "ding", {
             onPick = function(key)
-                local d = HeadsUp_GetDraft()
-                HeadsUp_PlaySound(key, d and d.soundVolume or 2)
+                local d = HeadsUpAuras_GetDraft()
+                HeadsUpAuras_PlaySound(key, d and d.soundVolume or 2)
             end,
         }) },
     })
@@ -1734,8 +1782,8 @@ local function BuildAbilityPage(page)
             { value = 3, text = "Loud" },
         }, 2, {
             onPick = function(volume)
-                local d = HeadsUp_GetDraft()
-                if d then HeadsUp_PlaySound(d.soundKey, volume) end
+                local d = HeadsUpAuras_GetDraft()
+                if d then HeadsUpAuras_PlaySound(d.soundKey, volume) end
             end,
         }) },
     })
@@ -1756,7 +1804,7 @@ local function BuildTimerPage(page, withCue)
     cue:Condition({
         label = function(d)
             local name = "the ability"
-            for _, a in ipairs(HeadsUp_GetAuras()) do
+            for _, a in ipairs(HeadsUpAuras_GetAuras()) do
                 if d and a.uid and a.uid == d.trackerOf then name = a.name or name end
             end
             return "When it ends, show |cffffd100" .. name .. "|r"
@@ -1858,7 +1906,7 @@ local function BuildSituationPage(page, counter)
                     { value = "char", text = "Only this character" },
                     { value = "spec", text = "This class" },
                 }
-                local lines = HeadsUp_ItemProfessions(d.itemID)
+                local lines = HeadsUpAuras_ItemProfessions(d.itemID)
                 if lines then
                     local names = {}
                     for _, name in pairs(lines) do names[#names + 1] = name end
@@ -1912,7 +1960,7 @@ local function BuildOtherAurasCard(page)
     local others = page:Card("Combine with auras")
     local MAX_OTHERS = 3
     local function FindAuraByUid(uid)
-        for _, a in ipairs(HeadsUp_GetAuras()) do
+        for _, a in ipairs(HeadsUpAuras_GetAuras()) do
             if a.uid == uid then return a end
         end
         return nil
@@ -1945,7 +1993,7 @@ local function BuildOtherAurasCard(page)
             if not row then return nil end
             local a = FindAuraByUid(row.uid)
             if not a then return "This aura was deleted: the row is ignored. Right-click to empty it." end
-            local needs = HeadsUp_CrossNeeds(row.uid, row.state)
+            local needs = HeadsUpAuras_CrossNeeds(row.uid, row.state)
             if not needs then
                 return "This aura has several conditions about hidden values (health, cooldown, resource...): it cannot be used as 'Not active' yet."
             end
@@ -1991,8 +2039,8 @@ local function BuildOtherAurasCard(page)
                             { text = "None", onClick = function() ClearOther(d, i) UI.Changed() end,
                               selected = function() return not (d.otherAuras and d.otherAuras[i]) end },
                         }
-                        for _, a in ipairs(HeadsUp_GetAuras()) do
-                            if a.uid and a.uid ~= d.uid and a.class == HeadsUp_GetPlayerClass() then
+                        for _, a in ipairs(HeadsUpAuras_GetAuras()) do
+                            if a.uid and a.uid ~= d.uid and a.class == HeadsUpAuras_GetPlayerClass() then
                                 items[#items + 1] = {
                                     text = a.name or "Aura", icon = a.icon or C_Spell.GetSpellTexture(a.spellID),
                                     selected = function() return d.otherAuras and d.otherAuras[i] and d.otherAuras[i].uid == a.uid end,
@@ -2054,7 +2102,7 @@ local function BuildOtherAurasCard(page)
     local plus = UI.Button(others, "+", L.CTRL_H)
     UI.Tip(plus, Tip("Add another aura", "Adds a row: this aura will also wait for another aura."))
     plus:SetScript("OnClick", function()
-        local d = HeadsUp_GetDraft()
+        local d = HeadsUpAuras_GetDraft()
         if d then
             d._otherExtra = true
             UI.Changed()
@@ -2142,7 +2190,7 @@ for _, step in ipairs(STEPS) do
     tab:SetScript("OnEnter", function(self) self.hover = true; self:Paint() end)
     tab:SetScript("OnLeave", function(self) self.hover = false; self:Paint() end)
     tab:SetScript("OnClick", function()
-        if not HeadsUp_GetDraft() then return end   -- no aura open: nothing to change
+        if not HeadsUpAuras_GetDraft() then return end   -- no aura open: nothing to change
         for i, v in ipairs(visible) do if v == step then SetStep(i) end end
     end)
     UI.Tip(tab, Tip(step.label, step.tip))
@@ -2227,9 +2275,9 @@ local OpenGroupPosition         -- (the window that places a group: made further
 
 -- how many auras of this class are in no group (a group needs at least two of them)
 local function FreeAuraCount()
-    local class, n = HeadsUp_GetPlayerClass(), 0
-    for _, a in ipairs(HeadsUp_GetAuras()) do
-        if HeadsUp_AuraListed(a) and a.spellID and not a.group then n = n + 1 end
+    local class, n = HeadsUpAuras_GetPlayerClass(), 0
+    for _, a in ipairs(HeadsUpAuras_GetAuras()) do
+        if HeadsUpAuras_AuraListed(a) and a.spellID and not a.group then n = n + 1 end
     end
     return n
 end
@@ -2237,17 +2285,17 @@ end
 -- the top of the window and the buttons that depend on the draft
 -- Back and Next work only while an aura is open
 local function UpdateNav()
-    local open = HeadsUp_GetDraft() ~= nil
+    local open = HeadsUpAuras_GetDraft() ~= nil
     backButton:SetOn(open and currentStep > 1)
     nextButton:SetOn(open and currentStep < #visible)
 end
 
 local function UpdateChrome()
-    local d = HeadsUp_GetDraft()
+    local d = HeadsUpAuras_GetDraft()
     newButton:SetOn(d == nil and not groupMode)
     if groupButton then
         -- it says Cancel in the group mode, Edit group while a group is selected, else Create group
-        local selected = (not groupMode) and HeadsUp_GetMovingGroup() or nil
+        local selected = (not groupMode) and HeadsUpAuras_GetMovingGroup() or nil
         groupButton.label:SetText(groupMode and "Cancel" or (selected and "Edit group" or "Create group"))
         -- a new group needs two free auras; a selected group can always be edited
         groupButton:SetOn(groupMode or (d == nil and (selected ~= nil or FreeAuraCount() >= 2)))
@@ -2260,9 +2308,9 @@ local function UpdateChrome()
         end
     end
     -- Save lights up only when something has changed (a new aura counts as changed once it has an ability)
-    saveButton:SetOn(d ~= nil and d.spellID ~= nil and HeadsUp_IsDirty())
+    saveButton:SetOn(d ~= nil and d.spellID ~= nil and HeadsUpAuras_IsDirty())
     -- Cancel works while an aura is being edited, or a new one has something in it
-    cancelButton:SetOn(d ~= nil and (HeadsUp_GetEditIndex() ~= nil or HeadsUp_IsDirty()))
+    cancelButton:SetOn(d ~= nil and (HeadsUpAuras_GetEditIndex() ~= nil or HeadsUpAuras_IsDirty()))
     -- a debuff tracker has its own two steps
     local wanted = "aura"
     if d and d.trackerOf then
@@ -2297,15 +2345,15 @@ function SetStep(index)
 end
 
 UI.onChange = function()
-    HeadsUp_ApplyDraft()
+    HeadsUpAuras_ApplyDraft()
     UI.SyncAll()
     UpdateChrome()
 end
 
 newButton:SetScript("OnClick", function()
     UI.ClearFocus()
-    HeadsUp_ClearPreviews()
-    HeadsUp_BeginEdit(nil)   -- a blank new aura
+    HeadsUpAuras_ClearPreviews()
+    HeadsUpAuras_BeginEdit(nil)   -- a blank new aura
     SetStep(1)
     Refresh()
     RefreshList()
@@ -2314,8 +2362,8 @@ end)
 cancelButton:SetScript("OnClick", function()
     UI.ClearFocus()
     picker:Hide()
-    HeadsUp_ClearPreviews()
-    HeadsUp_EndEdit()   -- (the draft is dropped: an aura being edited goes back to what was saved)
+    HeadsUpAuras_ClearPreviews()
+    HeadsUpAuras_EndEdit()   -- (the draft is dropped: an aura being edited goes back to what was saved)
     SetStep(1)
     Refresh()
     RefreshList()
@@ -2323,16 +2371,16 @@ end)
 
 saveButton:SetScript("OnClick", function()
     UI.ClearFocus()
-    if HeadsUp_Save() then
-        print("|cffff8800HeadsUp:|r aura saved")
+    if HeadsUpAuras_Save() then
+        print("|cffff8800HeadsUp Auras:|r aura saved")
         -- saving finishes the edit: unselect everything, nothing is open any more
-        HeadsUp_ClearPreviews()
-        HeadsUp_EndEdit()
+        HeadsUpAuras_ClearPreviews()
+        HeadsUpAuras_EndEdit()
         SetStep(1)
         Refresh()
         RefreshList()
     else
-        print("|cffff8800HeadsUp:|r choose an ability first")
+        print("|cffff8800HeadsUp Auras:|r choose an ability first")
     end
 end)
 
@@ -2353,7 +2401,7 @@ emptyText:SetPoint("TOPLEFT", listPanel, "TOPLEFT", 14, -46)
 emptyText:SetText("No saved auras yet.")
 
 -- Rename popup (right-click an aura in the list). Rename is saved right away.
-StaticPopupDialogs["HEADSUP_RENAME"] = {
+StaticPopupDialogs["HEADSUPAURAS_RENAME"] = {
     text = "Rename aura:",
     button1 = ACCEPT,
     button2 = CANCEL,
@@ -2369,13 +2417,13 @@ StaticPopupDialogs["HEADSUP_RENAME"] = {
     end,
     OnAccept = function(self, data)
         local eb = self.EditBox or self.editBox
-        HeadsUp_RenameAura(data.index, strtrim(eb:GetText()))
+        HeadsUpAuras_RenameAura(data.index, strtrim(eb:GetText()))
         Refresh()
         RefreshList()
     end,
 }
 
-StaticPopupDialogs["HEADSUP_DELETE"] = {
+StaticPopupDialogs["HEADSUPAURAS_DELETE"] = {
     text = "Delete the aura \"%s\"? This cannot be undone.",
     button1 = "Delete",
     button2 = CANCEL,
@@ -2383,8 +2431,8 @@ StaticPopupDialogs["HEADSUP_DELETE"] = {
     whileDead = true,
     hideOnEscape = true,
     OnAccept = function(_, data)
-        if HeadsUp_DeleteAura(data.index) then
-            HeadsUp_EndEdit()
+        if HeadsUpAuras_DeleteAura(data.index) then
+            HeadsUpAuras_EndEdit()
         end
         Refresh()
         RefreshList()
@@ -2393,21 +2441,21 @@ StaticPopupDialogs["HEADSUP_DELETE"] = {
 
 -- the group mode: tick boxes in the list
 local function EnterGroupMode(editId)
-    HeadsUp_ClearPreviews()
+    HeadsUpAuras_ClearPreviews()
     groupMode, groupEditId = true, editId
     wipe(groupSel)
     if editId then
-        for _, i in ipairs(HeadsUp_GroupMembers(editId)) do
-            local a = HeadsUp_GetAuras()[i]
+        for _, i in ipairs(HeadsUpAuras_GroupMembers(editId)) do
+            local a = HeadsUpAuras_GetAuras()[i]
             if a and a.uid then groupSel[a.uid] = true end
         end
     end
     groupButton.label:SetText("Cancel")
     -- editing a group: it is shown on the screen with its box and dots, and the window that places it opens too
     if editId then
-        for _, i in ipairs(HeadsUp_GroupMembers(editId)) do HeadsUp_SetPreview(i, true) end
-        HeadsUp_SetGroupMove(editId)
-        for _, g in ipairs(HeadsUp_GetGroups()) do
+        for _, i in ipairs(HeadsUpAuras_GroupMembers(editId)) do HeadsUpAuras_SetPreview(i, true) end
+        HeadsUpAuras_SetGroupMove(editId)
+        for _, g in ipairs(HeadsUpAuras_GetGroups()) do
             if g.id == editId then OpenGroupPosition(editId, g.name) end
         end
     end
@@ -2416,7 +2464,7 @@ local function EnterGroupMode(editId)
 end
 
 local function ExitGroupMode()
-    HeadsUp_ClearPreviews()   -- (a place that was typed and not saved goes back; the Position window closes by itself)
+    HeadsUpAuras_ClearPreviews()   -- (a place that was typed and not saved goes back; the Position window closes by itself)
     groupMode, groupEditId = false, nil
     wipe(groupSel)
     groupButton.label:SetText("Create group")
@@ -2436,12 +2484,12 @@ groupButton:SetScript("OnClick", function()
     UI.ClearFocus()
     if groupMode then
         ExitGroupMode()
-    elseif HeadsUp_GetDraft() == nil then
-        EnterGroupMode(HeadsUp_GetMovingGroup())   -- (a selected group is edited; else a new one is made)
+    elseif HeadsUpAuras_GetDraft() == nil then
+        EnterGroupMode(HeadsUpAuras_GetMovingGroup())   -- (a selected group is edited; else a new one is made)
     end
 end)
 
-StaticPopupDialogs["HEADSUP_NEW_GROUP"] = {
+StaticPopupDialogs["HEADSUPAURAS_NEW_GROUP"] = {
     text = "Name of the group:",
     button1 = ACCEPT,
     button2 = CANCEL,
@@ -2452,19 +2500,19 @@ StaticPopupDialogs["HEADSUP_NEW_GROUP"] = {
     hideOnEscape = true,
     OnShow = function(self)
         local eb = self.EditBox or self.editBox
-        eb:SetText("Group " .. (#HeadsUp_GetGroups() + 1))
+        eb:SetText("Group " .. (#HeadsUpAuras_GetGroups() + 1))
         eb:HighlightText()
     end,
     OnAccept = function(self, data)
         local eb = self.EditBox or self.editBox
         local name = strtrim(eb:GetText())
-        if name == "" then name = "Group " .. (#HeadsUp_GetGroups() + 1) end
-        HeadsUp_CreateGroup(name, data.uids)
+        if name == "" then name = "Group " .. (#HeadsUpAuras_GetGroups() + 1) end
+        HeadsUpAuras_CreateGroup(name, data.uids)
         ExitGroupMode()
     end,
 }
 
-StaticPopupDialogs["HEADSUP_RENAME_GROUP"] = {
+StaticPopupDialogs["HEADSUPAURAS_RENAME_GROUP"] = {
     text = "Rename the group:",
     button1 = ACCEPT,
     button2 = CANCEL,
@@ -2481,7 +2529,7 @@ StaticPopupDialogs["HEADSUP_RENAME_GROUP"] = {
     OnAccept = function(self, data)
         local eb = self.EditBox or self.editBox
         local name = strtrim(eb:GetText())
-        if name ~= "" then HeadsUp_RenameGroup(data.id, name) end
+        if name ~= "" then HeadsUpAuras_RenameGroup(data.id, name) end
         RefreshList()
     end,
 }
@@ -2492,11 +2540,11 @@ groupSave:SetScript("OnClick", function()
     for uid in pairs(groupSel) do uids[#uids + 1] = uid end
     if not groupMode or #uids < 2 then return end
     if groupEditId then
-        HeadsUp_GroupCommit()   -- the place of the group is kept too
-        HeadsUp_SetGroupMembers(groupEditId, uids)
+        HeadsUpAuras_GroupCommit()   -- the place of the group is kept too
+        HeadsUpAuras_SetGroupMembers(groupEditId, uids)
         ExitGroupMode()
     else
-        StaticPopup_Show("HEADSUP_NEW_GROUP", nil, nil, { uids = uids })
+        StaticPopup_Show("HEADSUPAURAS_NEW_GROUP", nil, nil, { uids = uids })
     end
 end)
 
@@ -2516,52 +2564,52 @@ end
 
 -- does this class have a group (a group with auras of this class)? Only those are offered by "Add to group"
 local function HasGroupOfClass()
-    local class = HeadsUp_GetPlayerClass()
-    for _, a in ipairs(HeadsUp_GetAuras()) do
-        if a.group and HeadsUp_AuraListed(a) then return true end
+    local class = HeadsUpAuras_GetPlayerClass()
+    for _, a in ipairs(HeadsUpAuras_GetAuras()) do
+        if a.group and HeadsUpAuras_AuraListed(a) then return true end
     end
     return false
 end
 
 local function AuraMenu(row)
     local index = row.index
-    local a = HeadsUp_GetAuras()[index]
+    local a = HeadsUpAuras_GetAuras()[index]
     if not a then return end
     -- one aura at a time: while another aura is open for editing (until Save, or until
     -- it is unselected / the window is closed) or a new one has unsaved work, no Edit
-    local editing = HeadsUp_GetEditIndex()
-    local blocked = (editing ~= nil and editing ~= index) or HeadsUp_IsDirty()
+    local editing = HeadsUpAuras_GetEditIndex()
+    local blocked = (editing ~= nil and editing ~= index) or HeadsUpAuras_IsDirty()
     if editing == index then blocked = false end
     local items = {
         { text = "Rename", onClick = function()
-            StaticPopup_Show("HEADSUP_RENAME", nil, nil, { index = index, name = a.name })
+            StaticPopup_Show("HEADSUPAURAS_RENAME", nil, nil, { index = index, name = a.name })
         end },
         { text = "Edit", disabled = blocked,
             tip = Tip("Edit", "Opens this aura for editing.", "The other auras that you are showing on the screen (shift+click) stay there, so you can see how this one sits next to them. Shift+click an aura to remove it from the screen."),
             onClick = function()
-            HeadsUp_BeginEdit(index)
-            HeadsUp_SetPreview(index, true)
+            HeadsUpAuras_BeginEdit(index)
+            HeadsUpAuras_SetPreview(index, true)
             SetStep(1)
             Refresh()
             RefreshList()
         end },
-        { text = "Create debuff tracker", disabled = (a.trackerOf ~= nil or (a.kind or "ability") ~= "ability" or HeadsUp_PreviewCount() > 1 or blocked), onClick = function()
-            local made = HeadsUp_CreateTracker(index, SuggestedDuration(a.spellID))
+        { text = "Create debuff tracker", disabled = (a.trackerOf ~= nil or (a.kind or "ability") ~= "ability" or HeadsUpAuras_PreviewCount() > 1 or blocked), onClick = function()
+            local made = HeadsUpAuras_CreateTracker(index, SuggestedDuration(a.spellID))
             if made then
-                HeadsUp_ClearPreviews()
-                HeadsUp_BeginEdit(made)
-                HeadsUp_SetPreview(made, true)
+                HeadsUpAuras_ClearPreviews()
+                HeadsUpAuras_BeginEdit(made)
+                HeadsUpAuras_SetPreview(made, true)
                 SetStep(1)
                 Refresh()
                 RefreshList()
             end
         end },
         { text = "Duplicate", onClick = function()
-            HeadsUp_DuplicateAura(index)
+            HeadsUpAuras_DuplicateAura(index)
             RefreshList()
         end },
         { text = a.hidden and "Activate" or "Deactivate", onClick = function()
-            HeadsUp_SetHidden(index, not a.hidden)
+            HeadsUpAuras_SetHidden(index, not a.hidden)
             RefreshList()
         end },
         { text = "Add to group", disabled = (a.group ~= nil or not HasGroupOfClass()),
@@ -2569,10 +2617,10 @@ local function AuraMenu(row)
             onClick = function()
                 -- only the groups of this class (a group of another class is not shown in the list either)
                 local groups = {}
-                local class = HeadsUp_GetPlayerClass()
-                for _, g in ipairs(HeadsUp_GetGroups()) do
-                    for _, m in ipairs(HeadsUp_GetAuras()) do
-                        if m.group == g.id and HeadsUp_AuraListed(m) then
+                local class = HeadsUpAuras_GetPlayerClass()
+                for _, g in ipairs(HeadsUpAuras_GetGroups()) do
+                    for _, m in ipairs(HeadsUpAuras_GetAuras()) do
+                        if m.group == g.id and HeadsUpAuras_AuraListed(m) then
                             groups[#groups + 1] = g
                             break
                         end
@@ -2580,8 +2628,8 @@ local function AuraMenu(row)
                 end
                 if #groups == 0 then return end
                 local function add(id)
-                    HeadsUp_ClearPreviews()
-                    HeadsUp_AddToGroup(index, id)
+                    HeadsUpAuras_ClearPreviews()
+                    HeadsUpAuras_AddToGroup(index, id)
                     RefreshList()
                 end
                 if #groups == 1 then   -- only one group: the aura goes straight into it
@@ -2595,13 +2643,13 @@ local function AuraMenu(row)
                 UI.OpenPopup(row, choices, 150)
             end },
         { text = "Remove from group", disabled = (a.group == nil), onClick = function()
-            HeadsUp_ClearPreviews()
+            HeadsUpAuras_ClearPreviews()
             a.group = nil
-            HeadsUp_PruneGroups()
+            HeadsUpAuras_PruneGroups()
             RefreshList()
         end },
         { text = "Delete", onClick = function()
-            StaticPopup_Show("HEADSUP_DELETE", a.name or "this aura", nil, { index = index })
+            StaticPopup_Show("HEADSUPAURAS_DELETE", a.name or "this aura", nil, { index = index })
         end },
     }
     UI.OpenPopup(row, items, 150)
@@ -2613,7 +2661,7 @@ local ANCHOR_TEXT = {
     T = "middle of the top edge", B = "middle of the bottom edge", L = "middle of the left edge", R = "middle of the right edge",
     C = "centre",
 }
-local posWindow = UI.Box(UIParent, C.window, C.borderHi, "Frame", "HeadsUpGroupPosition")
+local posWindow = UI.Box(UIParent, C.window, C.borderHi, "Frame", "HeadsUpAurasGroupPosition")
 posWindow:SetSize(310, 252)
 posWindow:SetPoint("CENTER", UIParent, "CENTER", 0, -160)
 posWindow:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -2627,7 +2675,7 @@ posWindow:Hide()
 
 local posTitle = UI.Text(posWindow, 14, C.accent)
 posTitle:SetPoint("TOPLEFT", 16, -14)
-posTitle:SetText("HeadsUp: place a group")
+posTitle:SetText("HeadsUp Auras: place a group")
 local posName = UI.Text(posWindow, 12, C.text)
 posName:SetPoint("TOPLEFT", posTitle, "BOTTOMLEFT", 0, -8)
 posName:SetWidth(278)
@@ -2640,7 +2688,7 @@ local FillPosition   -- (below)
 -- Enter (or leaving the box): the group goes to the typed coordinates right away. It is kept only with "Save".
 local function MoveToTyped()
     local x, y = tonumber(posX.edit:GetText()), tonumber(posY.edit:GetText())
-    if x and y then HeadsUp_GroupMoveTo(math.floor(x + 0.5), math.floor(y + 0.5)) end
+    if x and y then HeadsUpAuras_GroupMoveTo(math.floor(x + 0.5), math.floor(y + 0.5)) end
     FillPosition()
 end
 -- Esc: forget what was typed (an empty box moves nothing; the numbers are filled in again from the real place)
@@ -2666,9 +2714,9 @@ posClose:SetScript("OnClick", function() posWindow:Hide() end)
 
 -- the numbers follow the group while it is dragged or the dot is changed (not while one is typing)
 function FillPosition()
-    posDot:SetText("Dot: " .. (ANCHOR_TEXT[HeadsUp_GetGroupAnchor()] or "centre"))
+    posDot:SetText("Dot: " .. (ANCHOR_TEXT[HeadsUpAuras_GetGroupAnchor()] or "centre"))
     if posX.edit:HasFocus() or posY.edit:HasFocus() then return end
-    local x, y = HeadsUp_GroupAnchorPos()
+    local x, y = HeadsUpAuras_GroupAnchorPos()
     if x then
         posX.edit:SetText(tostring(x))
         posY.edit:SetText(tostring(y))
@@ -2676,7 +2724,7 @@ function FillPosition()
 end
 posPlace:SetScript("OnClick", function()
     UI.ClearFocus()   -- (leaving a box moves the group to what was typed)
-    HeadsUp_GroupCommit()
+    HeadsUpAuras_GroupCommit()
     posWindow:Hide()   -- saved: the window is done
 end)
 local posSince = 0
@@ -2684,15 +2732,15 @@ posWindow:SetScript("OnUpdate", function(self, elapsed)
     posSince = posSince + elapsed
     if posSince < 0.2 then return end
     posSince = 0
-    if not self.groupId or not HeadsUp_GroupMoving(self.groupId) then   -- the group is not on the screen any more
+    if not self.groupId or not HeadsUpAuras_GroupMoving(self.groupId) then   -- the group is not on the screen any more
         self:Hide()
         return
     end
     FillPosition()
 end)
 posWindow:SetScript("OnShow", function() posSince = 1 end)
-posWindow:SetScript("OnHide", function() HeadsUp_GroupRestore() end)   -- closed without Save: the group goes back
-tinsert(UISpecialFrames, "HeadsUpGroupPosition")
+posWindow:SetScript("OnHide", function() HeadsUpAuras_GroupRestore() end)   -- closed without Save: the group goes back
+tinsert(UISpecialFrames, "HeadsUpAurasGroupPosition")
 
 function OpenGroupPosition(id, name)
     posWindow.groupId = id
@@ -2702,10 +2750,10 @@ function OpenGroupPosition(id, name)
 end
 
 -- a click on a dot of the box on the screen also opens the window
-function HeadsUp_OnGroupDotClicked()
-    local id = HeadsUp_GetMovingGroup()
-    if not id or HeadsUp_GetDraft() ~= nil then return end
-    for _, g in ipairs(HeadsUp_GetGroups()) do
+function HeadsUpAuras_OnGroupDotClicked()
+    local id = HeadsUpAuras_GetMovingGroup()
+    if not id or HeadsUpAuras_GetDraft() ~= nil then return end
+    for _, g in ipairs(HeadsUpAuras_GetGroups()) do
         if g.id == id then OpenGroupPosition(id, g.name) end
     end
 end
@@ -2714,43 +2762,43 @@ end
 local function GroupMenu(row)
     local id = row.groupId
     local g
-    for _, x in ipairs(HeadsUp_GetGroups()) do
+    for _, x in ipairs(HeadsUpAuras_GetGroups()) do
         if x.id == id then g = x end
     end
     if not g then return end
     local allHidden = true
-    for _, i in ipairs(HeadsUp_GroupMembers(id)) do
-        local a = HeadsUp_GetAuras()[i]
+    for _, i in ipairs(HeadsUpAuras_GroupMembers(id)) do
+        local a = HeadsUpAuras_GetAuras()[i]
         if a and not a.hidden then allHidden = false end
     end
     local items = {
         { text = "Rename", onClick = function()
-            StaticPopup_Show("HEADSUP_RENAME_GROUP", nil, nil, { id = id, name = g.name })
+            StaticPopup_Show("HEADSUPAURAS_RENAME_GROUP", nil, nil, { id = id, name = g.name })
         end },
         { text = allHidden and "Activate" or "Deactivate", onClick = function()
-            HeadsUp_SetGroupHidden(id, not allHidden)
+            HeadsUpAuras_SetGroupHidden(id, not allHidden)
             RefreshList()
         end },
-        { text = "Position", disabled = (HeadsUp_GetDraft() ~= nil), onClick = function()
+        { text = "Position", disabled = (HeadsUpAuras_GetDraft() ~= nil), onClick = function()
             -- the group is shown on the screen (with its box and dots) and the small window opens
-            HeadsUp_ClearPreviews()
-            for _, i in ipairs(HeadsUp_GroupMembers(id)) do HeadsUp_SetPreview(i, true) end
-            HeadsUp_SetGroupMove(id)
+            HeadsUpAuras_ClearPreviews()
+            for _, i in ipairs(HeadsUpAuras_GroupMembers(id)) do HeadsUpAuras_SetPreview(i, true) end
+            HeadsUpAuras_SetGroupMove(id)
             OpenGroupPosition(id, g.name)
             RefreshList()
         end },
         { text = "Color", onClick = function()
             UI.OpenPalette(row, g.color, function(r, gr, b)
-                HeadsUp_SetGroupColor(id, { r, gr, b })
+                HeadsUpAuras_SetGroupColor(id, { r, gr, b })
                 RefreshList()
             end)
         end },
-        { text = "Edit group", disabled = (HeadsUp_GetDraft() ~= nil), onClick = function()
+        { text = "Edit group", disabled = (HeadsUpAuras_GetDraft() ~= nil), onClick = function()
             EnterGroupMode(id)
         end },
         { text = "Ungroup", onClick = function()
-            HeadsUp_ClearPreviews()
-            HeadsUp_Ungroup(id)
+            HeadsUpAuras_ClearPreviews()
+            HeadsUpAuras_Ungroup(id)
             RefreshList()
         end },
     }
@@ -2833,7 +2881,7 @@ local function GetRow(n)
     row.toggle:SetScript("OnClick", function(self)
         local owner = self:GetParent()
         if owner.groupId then
-            HeadsUp_ToggleGroupCollapsed(owner.groupId)
+            HeadsUpAuras_ToggleGroupCollapsed(owner.groupId)
             RefreshList()
         end
     end)
@@ -2868,7 +2916,7 @@ local function GetRow(n)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if self.groupId then
             local name = "Group"
-            for _, g in ipairs(HeadsUp_GetGroups()) do
+            for _, g in ipairs(HeadsUpAuras_GetGroups()) do
                 if g.id == self.groupId then name = g.name or name end
             end
             GameTooltip:AddLine(name, 1, 0.82, 0)
@@ -2878,7 +2926,7 @@ local function GetRow(n)
             GameTooltip:Show()
             return
         end
-        local a = HeadsUp_GetAuras()[self.index]
+        local a = HeadsUpAuras_GetAuras()[self.index]
         GameTooltip:AddLine(a and a.name or "Aura", 1, 1, 1)
         if a and a.hidden then
             GameTooltip:AddLine("Inactive: it does not show in the game.", 0.8, 0.8, 0.8, true)
@@ -2898,8 +2946,8 @@ local function GetRow(n)
     -- drag an aura onto a drop box (Trigger tab, "Combine with auras"): a small picture follows the mouse
     row:RegisterForDrag("LeftButton")
     row:SetScript("OnDragStart", function(self)
-        local a = not self.header and self.index and HeadsUp_GetAuras()[self.index]
-        if not a or not a.uid or not HeadsUp_GetDraft() then return end
+        local a = not self.header and self.index and HeadsUpAuras_GetAuras()[self.index]
+        if not a or not a.uid or not HeadsUpAuras_GetDraft() then return end
         UI.dragUid = a.uid
         dragGhost.icon:SetTexture(self.icon:GetTexture())
         dragGhost:Show()
@@ -2929,13 +2977,13 @@ local function GetRow(n)
             UI.ClearFocus()
             -- click: show all its auras on the screen and move them as one (click again to hide them)
             local id = self.groupId
-            local moving = HeadsUp_GroupMoving(id)
-            HeadsUp_ClearPreviews()
+            local moving = HeadsUpAuras_GroupMoving(id)
+            HeadsUpAuras_ClearPreviews()
             if not moving then
-                for _, i in ipairs(HeadsUp_GroupMembers(id)) do HeadsUp_SetPreview(i, true) end
-                HeadsUp_SetGroupMove(id)
-            elseif HeadsUp_GetEditIndex() ~= nil and not HeadsUp_IsDirty() then
-                HeadsUp_EndEdit()   -- hiding the group: the aura that was in focus is let go too (unless it has unsaved work)
+                for _, i in ipairs(HeadsUpAuras_GroupMembers(id)) do HeadsUpAuras_SetPreview(i, true) end
+                HeadsUpAuras_SetGroupMove(id)
+            elseif HeadsUpAuras_GetEditIndex() ~= nil and not HeadsUpAuras_IsDirty() then
+                HeadsUpAuras_EndEdit()   -- hiding the group: the aura that was in focus is let go too (unless it has unsaved work)
                 SetStep(1)
                 Refresh()
             end
@@ -2946,7 +2994,7 @@ local function GetRow(n)
         if not index then return end
         -- the group mode: a click ticks or unticks the aura
         if groupMode then
-            local a = HeadsUp_GetAuras()[index]
+            local a = HeadsUpAuras_GetAuras()[index]
             if a and a.uid then
                 groupSel[a.uid] = (not groupSel[a.uid]) or nil
                 Refresh()
@@ -2961,29 +3009,29 @@ local function GetRow(n)
         UI.ClearFocus()
         -- click: select this one only (click again to unselect); shift+click: add / remove
         if IsShiftKeyDown() then
-            HeadsUp_SetPreview(index, not HeadsUp_IsPreview(index))
-        elseif HeadsUp_PreviewCount() >= 2 then
+            HeadsUpAuras_SetPreview(index, not HeadsUpAuras_IsPreview(index))
+        elseif HeadsUpAuras_PreviewCount() >= 2 then
             -- several auras are shown (shift+click, or a group): a click picks this one to edit and the others stay on the screen
             -- Two separate things: the green square says what is shown on the screen; the highlight says which aura you work on.
             -- A click moves the highlight (or takes it away when the aura already has it); what is shown stays.
-            local editing = HeadsUp_GetEditIndex()
-            if HeadsUp_IsDirty() then return end   -- (unsaved work: Save or Cancel it first)
+            local editing = HeadsUpAuras_GetEditIndex()
+            if HeadsUpAuras_IsDirty() then return end   -- (unsaved work: Save or Cancel it first)
             if editing == index then
-                HeadsUp_EndEdit()
+                HeadsUpAuras_EndEdit()
             else
-                HeadsUp_SetPreview(index, true)
-                HeadsUp_BeginEdit(index)
+                HeadsUpAuras_SetPreview(index, true)
+                HeadsUpAuras_BeginEdit(index)
             end
             SetStep(1)
             Refresh()
         else
-            local onlyThis = HeadsUp_IsPreview(index) and HeadsUp_PreviewCount() == 1
-            HeadsUp_ClearPreviews()
-            if not onlyThis then HeadsUp_SetPreview(index, true) end
+            local onlyThis = HeadsUpAuras_IsPreview(index) and HeadsUpAuras_PreviewCount() == 1
+            HeadsUpAuras_ClearPreviews()
+            if not onlyThis then HeadsUpAuras_SetPreview(index, true) end
         end
         -- unselecting the aura that is open for editing closes it
-        if HeadsUp_GetEditIndex() == index and not HeadsUp_IsPreview(index) then
-            HeadsUp_EndEdit()
+        if HeadsUpAuras_GetEditIndex() == index and not HeadsUpAuras_IsPreview(index) then
+            HeadsUpAuras_EndEdit()
             Refresh()
         end
         RefreshList()
@@ -3089,7 +3137,7 @@ local function StyleRow(row, role, color, last)
 end
 
 local function ShowAuraRow(row, i, section, level, inGroup, last)
-    local auras = HeadsUp_GetAuras()
+    local auras = HeadsUpAuras_GetAuras()
     local a = auras[i]
     local info = C_Spell.GetSpellInfo(a.spellID)
     row.header = false
@@ -3133,20 +3181,20 @@ local function ShowAuraRow(row, i, section, level, inGroup, last)
         row.icon:SetDesaturated(false)
     end
     -- highlighted: open for editing, or its right-click menu is open
-    local open = (i == HeadsUp_GetEditIndex())
+    local open = (i == HeadsUpAuras_GetEditIndex())
     local editing = open or (UI.PopupOwner() == row)
     row.bg:SetShown(editing and not inGroup)
     -- the aura of a group that is open for editing: its card takes a lighter shade of the colour of the header of its
     -- group, so it stands out from the other auras of the group (the green dot already says which ones are shown)
     if inGroup and editing then
         local c = GROUP_COLOR
-        for _, g in ipairs(HeadsUp_GetGroups()) do
+        for _, g in ipairs(HeadsUpAuras_GetGroups()) do
             if g.id == a.group and g.color then c = g.color end
         end
         local light = 0.3   -- how far the colour goes towards white
         row.cardBg:SetColorTexture(c[1] + (1 - c[1]) * light, c[2] + (1 - c[2]) * light, c[3] + (1 - c[3]) * light, 1)
     end
-    row.dot:SetShown((HeadsUp_IsPreview(i) or open) and not groupMode)   -- (an aura that is open for editing is always shown)
+    row.dot:SetShown((HeadsUpAuras_IsPreview(i) or open) and not groupMode)   -- (an aura that is open for editing is always shown)
     row:Show()
 end
 
@@ -3177,7 +3225,7 @@ local function ShowGroupRow(row, g, section, count, allHidden, last)
         local light = 0.3
         row.cardBg:SetColorTexture(c[1] + (1 - c[1]) * light, c[2] + (1 - c[2]) * light, c[3] + (1 - c[3]) * light, 0.9)
     end
-    row.dot:SetShown(HeadsUp_GroupMoving(g.id) and not groupMode)
+    row.dot:SetShown(HeadsUpAuras_GroupMoving(g.id) and not groupMode)
     row:Show()
 end
 
@@ -3207,20 +3255,20 @@ end
 
 function RefreshList()
     -- a selected group that has gone away (it fell below two auras) is not selected any more
-    local movingId = HeadsUp_GetMovingGroup()
+    local movingId = HeadsUpAuras_GetMovingGroup()
     if movingId then
         local found = false
-        for _, g in ipairs(HeadsUp_GetGroups()) do
+        for _, g in ipairs(HeadsUpAuras_GetGroups()) do
             if g.id == movingId then found = true end
         end
-        if not found then HeadsUp_ClearPreviews() end
+        if not found then HeadsUpAuras_ClearPreviews() end
     end
     UpdateChrome()   -- (the group button depends on which group is selected)
-    local auras = HeadsUp_GetAuras()
-    local class = HeadsUp_GetPlayerClass()
+    local auras = HeadsUpAuras_GetAuras()
+    local class = HeadsUpAuras_GetPlayerClass()
     local active, hidden = {}, {}
-    local groups = HeadsUp_GetGroups()
-    local function visible(a) return HeadsUp_AuraListed(a) and a.spellID end
+    local groups = HeadsUpAuras_GetGroups()
+    local function visible(a) return HeadsUpAuras_AuraListed(a) and a.spellID end
     -- an aura and, under it, its debuff trackers that are in the same group (or in none)
     local function addAura(list, i, level)
         local a = auras[i]
@@ -3325,21 +3373,18 @@ end
 ------------------------------------------------------------
 frame:SetScript("OnShow", function()
     UpdateFeedbackButton()
-    HeadsUp_EndEdit()   -- opens with nothing open: New or Edit starts the work
+    HeadsUpAuras_EndEdit()   -- opens with nothing open: New or Edit starts the work
     SetStep(1)
     Refresh()
     RefreshList()
-    if HeadsUpDB and HeadsUp_DebugState then
-        HeadsUpDB.state = HeadsUp_DebugState()   -- silent: read from the SavedVariables file
-    end
 end)
 frame:SetScript("OnHide", function()
     feedbackPanel:Hide()
     UI.ClearFocus()
     UI.ClosePopup()
     picker:Hide()
-    HeadsUp_ClearPreviews()
-    HeadsUp_EndEdit()        -- discards anything not saved
+    HeadsUpAuras_ClearPreviews()
+    HeadsUpAuras_EndEdit()        -- discards anything not saved
     groupMode, groupEditId = false, nil
     wipe(groupSel)
     if groupButton then groupButton.label:SetText("Create group") end
@@ -3355,14 +3400,14 @@ frame:SetScript("OnEvent", function(self)
     end
 end)
 
--- called by HeadsUp.lua when an icon was dragged: the X and Y boxes show where it is now
-function HeadsUp_PositionChanged()
+-- called by HeadsUpAuras.lua when an icon was dragged: the X and Y boxes show where it is now
+function HeadsUpAuras_PositionChanged()
     if frame:IsShown() then
         UI.SyncAll()
         UpdateChrome()   -- (a dragged icon is a change: Save lights up)
     end
 end
 
-function HeadsUp_ToggleSettings()
+function HeadsUpAuras_ToggleSettings()
     frame:SetShown(not frame:IsShown())
 end

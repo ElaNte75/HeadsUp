@@ -1,9 +1,9 @@
--- HeadsUp: how long the effect of an ability lasts on an enemy (a debuff, a damage over time...),
+-- HeadsUp Auras: how long the effect of an ability lasts on an enemy (a debuff, a damage over time...),
 -- per class, in seconds. MADE BY tools/make_durations.py FROM THE GAME'S OWN DATA: do not edit by hand.
--- Made on 2026-10-21. Format: HeadsUpDurations[CLASS]["Ability name"] = { seconds, "enemy" or "self" }
+-- Made on 2026-10-21. Format: HeadsUpAurasDurations[CLASS]["Ability name"] = { seconds, "enemy" or "self" }
 -- A suggestion: a talent can change a duration.
 
-HeadsUpDurations = {
+HeadsUpAurasDurations = {
     DEATHKNIGHT = {
         ["Abomination Limb"] = { 12, "self" },
         ["Abomination's Might"] = { 2, "enemy" },
@@ -3343,6 +3343,6 @@ HeadsUpDurations = {
     },
 }
 
--- Other abilities that put the same effect on the enemy: HeadsUpAlsoStartedBy[CLASS]["Ability"] = { "Other ability", ... }
-HeadsUpAlsoStartedBy = {
+-- Other abilities that put the same effect on the enemy: HeadsUpAurasAlsoStartedBy[CLASS]["Ability"] = { "Other ability", ... }
+HeadsUpAurasAlsoStartedBy = {
 }

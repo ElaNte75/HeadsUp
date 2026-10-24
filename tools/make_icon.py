@@ -3,7 +3,7 @@ Draws the logo of HeadsUp: a golden sunburst around an orange badge with an excl
 on a dark rounded square.
 
 Writes:
-  HeadsUp/Media/icon.tga     128 x 128, for the game (add-on list, minimap button)
+  HeadsUpAuras/Media/icon.tga     128 x 128, for the game (add-on list, minimap button)
   release/logo.png           512 x 512, for the CurseForge project page
 
 Needs:  pip install pillow        Run:  python tools/make_icon.py
@@ -86,7 +86,7 @@ def main():
     ImageDraw.Draw(border).rounded_rectangle((3, 3, SIZE - 4, SIZE - 4), radius=228, outline=(255, 190, 90, 120), width=7)
     final = Image.alpha_composite(final, border)
 
-    media = os.path.join(HERE, "..", "HeadsUp", "Media")
+    media = os.path.join(HERE, "..", "HeadsUpAuras", "Media")
     release = os.path.join(HERE, "..", "release")
     os.makedirs(media, exist_ok=True)
     os.makedirs(release, exist_ok=True)

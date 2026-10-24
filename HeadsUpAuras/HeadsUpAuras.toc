@@ -1,0 +1,17 @@
+## Interface: 120107, 120105, 120100
+## Title: HeadsUp Auras
+## Notes: Shows the important "press this now" icon at the moment it matters, using conditions you set (health, resources, cooldowns, empowered abilities, combat state and more).
+## Author: Gchris
+## Version: 1.2 beta
+## SavedVariables: HeadsUpAurasDB
+## IconTexture: Interface\AddOns\HeadsUpAuras\Media\icon.tga
+## AddonCompartmentFunc: HeadsUpAuras_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: HeadsUpAuras_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: HeadsUpAuras_OnCompartmentLeave
+
+HeadsUpAuras.lua
+KnownGlows.lua
+KnownDurations.lua
+UI.lua
+Settings.lua
+Minimap.lua

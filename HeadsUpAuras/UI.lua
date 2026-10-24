@@ -1,4 +1,4 @@
--- HeadsUp: interface toolkit.
+-- HeadsUp Auras: interface toolkit.
 -- Our own look (no Blizzard frames or buttons), one set of sizes for everything.
 --
 -- The grid: every card is as wide as the page and has 6 columns. A control is 2 columns wide
@@ -8,7 +8,7 @@
 -- To add an option: add one Condition / Field line to a card in Settings.lua. Nothing here changes.
 
 local UI = {}
-HeadsUpUI = UI
+HeadsUpAurasUI = UI
 
 local FONT = STANDARD_TEXT_FONT
 
@@ -109,7 +109,7 @@ end
 function UI.Tip(frame, fill)
     frame:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        fill(GameTooltip, HeadsUp_GetDraft())
+        fill(GameTooltip, HeadsUpAuras_GetDraft())
         GameTooltip:Show()
     end)
     frame:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -323,7 +323,7 @@ local function buildPopup()
     blocker:SetScript("OnClick", function() UI.ClosePopup() end)
 
     popup = UI.Box(UIParent, C.popup, C.borderHi)
-    _G.HeadsUpPopup = popup
+    _G.HeadsUpAurasPopup = popup
     popup:SetFrameStrata("FULLSCREEN_DIALOG")
     popup:SetFrameLevel(10)
     popup:EnableMouse(true)
@@ -376,7 +376,7 @@ local function buildPopup()
         r:SetScript("OnClick", function(self) UI.PopupClick(self) end)
         popup.rows[i] = r
     end
-    tinsert(UISpecialFrames, "HeadsUpPopup")
+    tinsert(UISpecialFrames, "HeadsUpAurasPopup")
 end
 
 function UI.PopupOwner()
@@ -520,7 +520,7 @@ function UI.OpenPalette(anchor, current, onPick)
         local colors = PaletteColors()
         local rowsCount = math.ceil(#colors / PALETTE_COLS)
         palette = UI.Box(UIParent, C.popup, C.borderHi)
-        _G.HeadsUpPalette = palette
+        _G.HeadsUpAurasPalette = palette
         palette:SetFrameStrata("FULLSCREEN_DIALOG")
         palette:SetFrameLevel(30)
         palette:SetClampedToScreen(true)
@@ -543,7 +543,7 @@ function UI.OpenPalette(anchor, current, onPick)
             end)
             palette.swatches[i] = b
         end
-        tinsert(UISpecialFrames, "HeadsUpPalette")
+        tinsert(UISpecialFrames, "HeadsUpAurasPalette")
     end
     palette.onPick = onPick
     palette:ClearAllPoints()
@@ -559,7 +559,7 @@ end
 local registry = {}
 
 function UI.SyncAll()
-    local d = HeadsUp_GetDraft()
+    local d = HeadsUpAuras_GetDraft()
     for _, w in ipairs(registry) do w.Sync(d) end
 end
 
@@ -582,7 +582,7 @@ local function MakeControl(card, def, x, y, w)
     local kind = def.type
     if kind == "dropdown" then
         f = UI.Dropdown(card, w, function(self)
-            UI.OpenPopup(self, def.items(HeadsUp_GetDraft()))
+            UI.OpenPopup(self, def.items(HeadsUpAuras_GetDraft()))
         end)
         function c.Sync(d, on)
             f:SetLabel(d and def.text(d) or "")
@@ -592,7 +592,7 @@ local function MakeControl(card, def, x, y, w)
         -- are ticked and it only says "2 selected"), pointing at it lists the choices, one under the other.
         f:HookScript("OnEnter", function(self)
             if UI.PopupOwner() == self then return end
-            local d = HeadsUp_GetDraft()
+            local d = HeadsUpAuras_GetDraft()
             if not d then return end
             local okItems, items = pcall(def.items, d)
             if not okItems or type(items) ~= "table" then return end
@@ -618,7 +618,7 @@ local function MakeControl(card, def, x, y, w)
             numeric = def.numeric, maxLetters = def.maxLetters, unit = def.unit,
             commit = function(eb)
                 if not UI.IsOpen() then return end
-                local d = HeadsUp_GetDraft()
+                local d = HeadsUpAuras_GetDraft()
                 if not d then return end
                 local v = eb:GetText()
                 if def.numeric or def.signed then   -- signed: may start with a minus sign
@@ -630,7 +630,7 @@ local function MakeControl(card, def, x, y, w)
                 if def.noApply then UI.SyncAll() else UI.Changed() end
             end,
             revert = function(eb)
-                local d = HeadsUp_GetDraft()
+                local d = HeadsUpAuras_GetDraft()
                 if d then eb:SetText(current(d)) end
             end,
         })
@@ -643,7 +643,7 @@ local function MakeControl(card, def, x, y, w)
             local function take()
                 local kind, id = GetCursorInfo()
                 if kind ~= "item" and kind ~= "currency" then return end
-                local d = HeadsUp_GetDraft()
+                local d = HeadsUpAuras_GetDraft()
                 if not d then return end
                 ClearCursor()
                 def.onItemDrop(d, id, kind)
@@ -661,7 +661,7 @@ local function MakeControl(card, def, x, y, w)
     elseif kind == "button" then
         f = UI.Button(card, def.text, w)
         f:SetScript("OnClick", function()
-            local d = HeadsUp_GetDraft()
+            local d = HeadsUpAuras_GetDraft()
             if d then def.onClick(d, f) end
         end)
         function c.Sync(d, on)
@@ -671,7 +671,7 @@ local function MakeControl(card, def, x, y, w)
         -- a small toggle between two boxes (the width / height link): def.active(d) = switched on
         f = UI.Button(card, def.text or "x", w)
         f:SetScript("OnClick", function()
-            local d = HeadsUp_GetDraft()
+            local d = HeadsUpAuras_GetDraft()
             if d then def.onClick(d) end
         end)
         function c.Sync(d, on)
@@ -702,7 +702,7 @@ local function MakeControl(card, def, x, y, w)
             self:SetBackdropBorderColor(rgba(hot and C.accent or (hov and C.borderHi or C.border)))
         end)
         f:SetScript("OnClick", function(self, button)
-            local d = HeadsUp_GetDraft()
+            local d = HeadsUpAuras_GetDraft()
             if not d then return end
             if button == "RightButton" then
                 def.onClear(d)
@@ -738,7 +738,7 @@ local function MakeControl(card, def, x, y, w)
         end
         UI.drops = UI.drops or {}
         UI.drops[#UI.drops + 1] = { frame = f, drop = function(uid)
-            local d = HeadsUp_GetDraft()
+            local d = HeadsUpAuras_GetDraft()
             if d and f:IsEnabled() then
                 def.onDrop(d, uid)
                 UI.Changed()
@@ -757,7 +757,7 @@ local function MakeControl(card, def, x, y, w)
             self.swatch:SetDesaturated(not on)
         end)
         f:SetScript("OnClick", function(self)
-            local d = HeadsUp_GetDraft()
+            local d = HeadsUpAuras_GetDraft()
             if not d then return end
             UI.ClosePopup()
             UI.OpenPalette(self, def.get(d), function(r, g, b)
@@ -773,7 +773,7 @@ local function MakeControl(card, def, x, y, w)
     elseif kind == "icon" then
         f = UI.IconButton(card, w, def.text)
         f:SetScript("OnClick", function()
-            local d = HeadsUp_GetDraft()
+            local d = HeadsUpAuras_GetDraft()
             if d then def.onClick(d, f) end
         end)
         function c.Sync(d, on)
@@ -783,7 +783,7 @@ local function MakeControl(card, def, x, y, w)
             f:SetOn(on)
         end
     else
-        error("HeadsUp UI: unknown control type " .. tostring(kind))
+        error("HeadsUp Auras UI: unknown control type " .. tostring(kind))
     end
     f:SetPoint("TOPLEFT", card, "TOPLEFT", x, -y)
     -- (a number box shows its tooltip from the box inside it: the frame around it has no mouse)
@@ -916,7 +916,7 @@ function CardMethods:Condition(def)
         type(def.label) ~= "function" and def.label or "")
     check:SetPoint("TOPLEFT", self, "TOPLEFT", L.PAD + indent, -self.rowY)
     check:SetScript("OnClick", function()
-        local d = HeadsUp_GetDraft()
+        local d = HeadsUpAuras_GetDraft()
         if not d then return end
         set(d, not get(d))
         UI.Changed()

@@ -2,7 +2,7 @@
 Draws the little pictures of the themed "Empowered effects" (frost, blood, poison...) of HeadsUp.
 Every picture is white (or grey) on a transparent background: the add-on gives it its colour.
 
-Writes HeadsUp/Media/fx/*.tga (the sizes are powers of two, as the game needs).
+Writes HeadsUpAuras/Media/fx/*.tga (the sizes are powers of two, as the game needs).
 
 Needs:  pip install pillow        Run:  python tools/make_fx.py
 New picture files need a full restart of the game (a /reload is not enough).
@@ -13,7 +13,7 @@ import random
 from PIL import Image, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "..", "HeadsUp", "Media", "fx")
+OUT = os.path.join(HERE, "..", "HeadsUpAuras", "Media", "fx")
 K = 4   # drawn 4 times bigger, then made smaller (smooth edges)
 
 

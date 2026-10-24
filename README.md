@@ -1,10 +1,10 @@
-# HeadsUp
+# HeadsUp Auras
 
-**HeadsUp** shows the important "press this now" icon at the moment it matters, so you do not get tunnel vision in a fight. It is a World of Warcraft add-on for **Retail (Midnight, 12.x)** and works for **every class and specialization**.
+**HeadsUp Auras** shows the important "press this now" icon at the moment it matters, so you do not get tunnel vision in a fight. It is a World of Warcraft add-on for **Retail (Midnight, 12.x)** and works for **every class and specialization**.
 
-You build your own icons ("auras") with a simple step-by-step window: choose an ability, tell HeadsUp *when* it should show, and place it on the screen. Each icon shows only when **all** the conditions you chose are true.
+You build your own icons ("auras") with a simple step-by-step window: choose an ability, tell HeadsUp Auras *when* it should show, and place it on the screen. Each icon shows only when **all** the conditions you chose are true.
 
-> **Beta (1.1 beta).** It was built and tested on a Death Knight. Other classes should work, but they are not tested yet: please tell us what you find (see *Feedback*).
+> **Beta (1.2 beta).** It was built and tested on a Death Knight. Other classes should work, but they are not tested yet: please tell us what you find (see *Feedback*).
 
 ## What you can do
 
@@ -20,17 +20,25 @@ You build your own icons ("auras") with a simple step-by-step window: choose an 
 - **Place it exactly**: drag it with the mouse, or type the X and Y position.
 - **Many auras**: keep as many as you want, deactivate the ones you do not need now (without deleting them) and activate them again later.
 
-HeadsUp works within the rules of the current game: it never reads hidden values in a way the game forbids.
+HeadsUp Auras works within the rules of the current game: it never reads hidden values in a way the game forbids.
 
 ## Install
 
-1. Download the latest release (or the `HeadsUp` folder of this repository).
-2. Put the `HeadsUp` folder in `World of Warcraft/_retail_/Interface/AddOns/`.
+1. Download the latest release (or the `HeadsUpAuras` folder of this repository).
+2. Put the `HeadsUpAuras` folder in `World of Warcraft/_retail_/Interface/AddOns/`.
 3. Start the game (or `/reload`).
+
+### Coming from the old "HeadsUp" folder?
+
+The add-on was called **HeadsUp** until version 1.1 beta. The name was too close to another add-on (Heads Up, which speaks tank busters) and the two could not live together, so it is now **HeadsUp Auras**. Your auras, groups and counters can come with you:
+
+1. Close the game. Delete the old `HeadsUp` folder from `Interface/AddOns/` and put the new `HeadsUpAuras` folder there.
+2. Run `release/Migrate-HeadsUp-settings.ps1` once (right-click > Run with PowerShell) and choose your World of Warcraft folder. It copies `WTF/Account/<account>/SavedVariables/HeadsUp.lua` to `HeadsUpAuras.lua` (the old file is not touched).
+3. Start the game. The command is now `/hua` (or `/headsupauras`).
 
 ## Use
 
-- Type `/headsup` to open the window, or click the **HeadsUp button on the minimap** (drag it to move it; `/headsup minimap` hides or shows it). It is also in the add-on menu of the minimap.
+- Type `/hua` to open the window, or click the **HeadsUp Auras button on the minimap** (drag it to move it; `/hua minimap` hides or shows it). It is also in the add-on menu of the minimap.
 - Step 1 **Aura**: ability, name, icon, size, position, look.
   Step 2 **Status**: health, enemy, resources.
   Step 3 **Ability**: availability, cooldown, charges, empowered.
@@ -44,10 +52,10 @@ Your feedback is very important: tell us what problem you ran into, what you nee
 
 ## For developers
 
-- `HeadsUp/HeadsUp.lua`: the core (the icons and their conditions).
-- `HeadsUp/UI.lua`: the small interface toolkit (grid, cards, controls).
-- `HeadsUp/Settings.lua`: the settings window.
-- `HeadsUp/KnownGlows.lua`: which abilities can light up, made from the game's own data by `tools/make_glows.py` (run it again after a patch). Do not edit it by hand.
+- `HeadsUpAuras/HeadsUpAuras.lua`: the core (the icons and their conditions).
+- `HeadsUpAuras/UI.lua`: the small interface toolkit (grid, cards, controls).
+- `HeadsUpAuras/Settings.lua`: the settings window.
+- `HeadsUpAuras/KnownGlows.lua`: which abilities can light up, made from the game's own data by `tools/make_glows.py` (run it again after a patch). Do not edit it by hand.
 
 ## License
 

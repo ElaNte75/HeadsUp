@@ -1,4 +1,4 @@
--- HeadsUp: a list of "auras" (indicators), each driven by its own saved settings.
+-- HeadsUp Auras: a list of "auras" (indicators), each driven by its own saved settings.
 --
 -- Every indicator is made of three frames:
 --   A (invisible): alpha follows player health (1 if below the chosen %, else 0).
@@ -13,14 +13,14 @@
 -- Positioning: an aura that is being edited, or selected in the list, shows its placeholder
 -- and can be dragged with the left mouse button (a selected one is saved immediately).
 
--- Error log: every Lua error that mentions HeadsUp is kept (with the time) in
--- HeadsUpDB.errors, so it can be read from the SavedVariables file after /reload.
+-- Error log: every Lua error that mentions HeadsUp Auras is kept (with the time) in
+-- HeadsUpAurasDB.errors, so it can be read from the SavedVariables file after /reload.
 local pendingErrors = {}
 local function LogError(text)
     local entry = date("%Y-%m-%d %H:%M:%S  ") .. text:sub(1, 800)
-    if HeadsUpDB then
-        local list = HeadsUpDB.errors or {}
-        HeadsUpDB.errors = list
+    if HeadsUpAurasDB then
+        local list = HeadsUpAurasDB.errors or {}
+        HeadsUpAurasDB.errors = list
         list[#list + 1] = entry
         while #list > 20 do table.remove(list, 1) end
     else
@@ -30,7 +30,7 @@ end
 local previousHandler = geterrorhandler()
 seterrorhandler(function(err)
     local text = tostring(err)
-    if text:find("HeadsUp") then LogError(text) end
+    if text:find("HeadsUpAuras") then LogError(text) end
     return previousHandler(err)
 end)
 
@@ -41,9 +41,9 @@ local EFFECT_STRATA = { "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN" }
 -- How small the icon gets during "Pulse" (1 = not at all).
 local PULSE_SHRINK = 0.92
 
-local KEYS = { "class", "specs", "name", "hidden", "spellID", "healthEnabled", "healthOp", "healthPct", "enemyEnabled", "enemyOp", "enemyPct", "cdEnabled", "cdState", "chargesEnabled", "chargesState", "enemyAliveEnabled", "enemyAlive", "buffEnabled", "buffID", "buffState", "suppressEnabled", "suppressSeconds", "suppressReset", "uid", "trackerOf", "trackerCue", "kind", "trackShow", "barDrain", "barIcon", "barColor", "barTime", "barTimeOn", "barIconOn", "otherAuras", "crowdEnabled", "crowdOp", "crowdN", "crowdMetric", "group", "effect", "icon", "showWhenEnabled", "showRules", "lingerEnabled", "lingerSeconds", "layer", "availEnabled", "pos", "width", "height", "sizeLinked", "powerEnabled", "powerOp", "powerValue", "secEnabled", "secOp", "secValue", "buffAlways", "empowerFx", "soundEnabled", "soundKey", "soundVolume", "formEnabled", "formSpell", "tgtHostileEnabled", "tgtHostile", "tgtTypeEnabled", "tgtType", "tgtClassEnabled", "tgtClass", "threatEnabled", "threatState", "shape", "empowerLight", "itemID", "ctIcon", "ctName", "ctNum", "ctColor", "ctSize", "ctBg", "ctBgAlpha", "ctWho", "ctChar", "ctType", "currencyID", "ctBank" }
+local KEYS = { "class", "specs", "name", "hidden", "spellID", "healthEnabled", "healthOp", "healthPct", "enemyEnabled", "enemyOp", "enemyPct", "cdEnabled", "cdState", "chargesEnabled", "chargesState", "enemyAliveEnabled", "enemyAlive", "buffEnabled", "buffID", "buffState", "suppressEnabled", "suppressSeconds", "suppressReset", "uid", "trackerOf", "trackerCue", "kind", "trackShow", "barDrain", "barIcon", "barColor", "barTime", "barTimeOn", "barIconOn", "otherAuras", "crowdEnabled", "crowdOp", "crowdN", "crowdMetric", "group", "effect", "icon", "showWhenEnabled", "showRules", "lingerEnabled", "lingerSeconds", "layer", "availEnabled", "pos", "width", "height", "sizeLinked", "powerEnabled", "powerOp", "powerValue", "secEnabled", "secOp", "secValue", "buffAlways", "empowerFx", "soundEnabled", "soundKey", "soundVolume", "formEnabled", "formSpell", "tgtHostileEnabled", "tgtHostile", "tgtTypeEnabled", "tgtType", "tgtClassEnabled", "tgtClass", "threatEnabled", "threatState", "shape", "empowerLight", "itemID", "ctIcon", "ctName", "ctNum", "ctColor", "ctSize", "ctBg", "ctBgAlpha", "ctWho", "ctChar", "ctType", "currencyID", "ctBank", "buffIgnore" }
 
-local auras = {}        -- saved list (HeadsUpDB.auras)
+local auras = {}        -- saved list (HeadsUpAurasDB.auras)
 local pool = {}         -- pool[i] = indicator for auras[i]
 local newInd            -- indicator used for a draft that is not saved yet
 local draft, editIndex, editInd
@@ -53,11 +53,11 @@ local function RefreshCurrentSpec()
     currentSpec = index and (GetSpecializationInfo(index)) or nil
 end
 
--- The sounds for "Play a sound when it shows". file = our own sounds (HeadsUp/Sounds, made by
+-- The sounds for "Play a sound when it shows". file = our own sounds (HeadsUpAuras/Sounds, made by
 -- tools/make_sounds.py: three files for each, 1 = soft, 2 = normal, 3 = loud). id = a sound of the game
 -- (ids of its sound kits, from its own code); the game has no volume for those, so a louder level
 -- plays the same sound two or three times at once.
-HeadsUpSounds = {
+HeadsUpAurasSounds = {
     { key = "ding", text = "Ding", file = "ding" },
     { key = "dingdong", text = "Ding-dong", file = "dingdong" },
     { key = "double", text = "Double ding", file = "double" },
@@ -74,37 +74,19 @@ HeadsUpSounds = {
     { key = "alert", text = "Game: Alert", id = 15273 },
 }
 
--- every sound that is played is written to HeadsUpDB.soundLog (the answer of the game: did it play?),
--- so that a silent sound can be examined from the log file
-local function LogSound(text)
-    if not HeadsUpDB then return end
-    local list = HeadsUpDB.soundLog or {}
-    HeadsUpDB.soundLog = list
-    list[#list + 1] = date("%H:%M:%S ") .. text
-    while #list > 20 do table.remove(list, 1) end
-end
-
 -- volume: 1 = soft, 2 = normal, 3 = loud
-function HeadsUp_PlaySound(key, volume)
+function HeadsUpAuras_PlaySound(key, volume)
     volume = math.max(1, math.min(3, volume or 2))
-    for _, sound in ipairs(HeadsUpSounds) do
+    for _, sound in ipairs(HeadsUpAurasSounds) do
         if sound.key == key then
             if sound.file then
-                local path = "Interface\\AddOns\\HeadsUp\\Sounds\\" .. sound.file .. "_" .. volume .. ".ogg"
-                local ok, willPlay, handle = pcall(PlaySoundFile, path, "Master")
-                LogSound(key .. " file " .. path .. " -> " .. tostring(ok) .. " willPlay=" .. tostring(willPlay)
-                    .. " handle=" .. tostring(handle))
+                pcall(PlaySoundFile, "Interface\\AddOns\\HeadsUpAuras\\Sounds\\" .. sound.file .. "_" .. volume .. ".ogg", "Master")
             else
-                for n = 1, volume do
-                    local ok, willPlay, handle = pcall(PlaySound, sound.id, "Master")
-                    LogSound(key .. " game id " .. sound.id .. " #" .. n .. " -> " .. tostring(ok)
-                        .. " willPlay=" .. tostring(willPlay) .. " handle=" .. tostring(handle))
-                end
+                for n = 1, volume do pcall(PlaySound, sound.id, "Master") end
             end
             return
         end
     end
-    LogSound("unknown sound " .. tostring(key))
 end
 
 local errorShown = false
@@ -159,11 +141,13 @@ local function NewConfig()
         buffID = nil,            -- the buff chosen by the player (for the label; the glow is checked)
         buffState = "active",    -- "active" = the ability is lit up, "gone" = it is not
         soundEnabled = false,    -- play a sound when the aura shows (only when its conditions can be known) ...
-        soundKey = "ding",       -- ... this one (see HeadsUpSounds) ...
+        soundKey = "ding",       -- ... this one (see HeadsUpAurasSounds) ...
         soundVolume = 2,         -- ... 1 = soft, 2 = normal, 3 = loud
         empowerFx = "auto",      -- the effect shown while the icon is on because its ability is empowered:
                                  -- "auto" (by specialization), "sunburst", "flame", "burst", "frost", "blood", "poison"
-        buffAlways = false,      -- with "Empowered: active": also show it whenever it is lit up, ignoring the other
+        buffIgnore = {},         -- with "Empowered: active": the conditions that do not count while the ability is lit up ({ health = true, ... },
+                                 -- see HeadsUpAuras_IgnoreKeys); every other condition still counts
+        buffAlways = false,      -- (the first version of that: now buffIgnore) with "Empowered: active": also show it whenever it is lit up, ignoring the other
                                  -- conditions (the "Show it only" rules, specs and hide-timer still apply)
         showWhenEnabled = false, -- off = the aura may always show; on = only as chosen below
         -- the ticked situations: combat / out, mounted / unmounted, vehicle / novehicle, never
@@ -221,6 +205,9 @@ local function CopyConfig(src)
             for i, row in ipairs(src.otherAuras) do copy.otherAuras[i] = { uid = row.uid, state = row.state } end
         elseif k == "barColor" and src.barColor then
             copy.barColor = { src.barColor[1], src.barColor[2], src.barColor[3] }
+        elseif k == "buffIgnore" and src.buffIgnore then
+            copy.buffIgnore = {}
+            for key, on in pairs(src.buffIgnore) do copy.buffIgnore[key] = on end
         elseif k == "ctColor" and src.ctColor then
             copy.ctColor = { src.ctColor[1], src.ctColor[2], src.ctColor[3] }
         elseif k == "ctBg" and src.ctBg then
@@ -244,6 +231,10 @@ end
 
 local function FillDefaults(cfg)
     local d = NewConfig()
+    -- (the first "Ignore the resources" ignored the cost, the main and the second resource, and the rows of "Combine with auras")
+    if cfg.buffIgnore == nil and cfg.buffAlways then
+        cfg.buffIgnore = { avail = true, power = true, second = true, others = true }
+    end
     -- (a counter that is a bar had a dark box before the background could be chosen)
     if cfg.ctBgAlpha == nil and cfg.kind == "counter" and cfg.shape == "bar" then cfg.ctBgAlpha = 80 end
     for _, k in ipairs(KEYS) do
@@ -362,8 +353,7 @@ local function Compare(a, op, b)
 end
 
 -- How many of the second resource the player has now (ready runes, holy power, ...).
--- nil when the game does not let us read it. Every reading is counted in HeadsUpDB.resourceStats
--- (in combat / out of combat, readable / hidden), so the log file shows how reliable it is.
+-- nil when the game does not let us read it.
 local function SecondaryCount(powerType)
     local count
     local ok = pcall(function()
@@ -381,12 +371,6 @@ local function SecondaryCount(powerType)
             count = value
         end
     end)
-    if HeadsUpDB then
-        local stats = HeadsUpDB.resourceStats or {}
-        HeadsUpDB.resourceStats = stats
-        local key = (inCombat and "combat_" or "ooc_") .. (ok and "readable" or "hidden")
-        stats[key] = (stats[key] or 0) + 1
-    end
     if ok then return count end
     return nil
 end
@@ -410,7 +394,7 @@ local FX_PING = "Interface\\Cooldown\\ping4"
 local FX_RING = "Interface\\Buttons\\UI-ActionButton-Border"
 local FX_WHITE = "Interface\\Buttons\\WHITE8x8"
 -- our own pictures of the themed effects (made by tools/make_fx.py)
-local FX_DIR = "Interface\\AddOns\\HeadsUp\\Media\\fx\\"
+local FX_DIR = "Interface\\AddOns\\HeadsUpAuras\\Media\\fx\\"
 local FX_GLOW, FX_SHARD, FX_FLAKE = FX_DIR .. "glow.tga", FX_DIR .. "shard.tga", FX_DIR .. "flake.tga"
 local FX_SPLAT, FX_DROP, FX_BUBBLE = FX_DIR .. "splat.tga", FX_DIR .. "drop.tga", FX_DIR .. "bubble.tga"
 
@@ -1120,7 +1104,7 @@ local function CreateIndicator()
     end)
 
     -- COUNTER: three pieces of text (left, centre, right) with no frame and no background; they hold the item's picture, name
-    -- and number (HeadsUp_UpdateCounter). Part of B like the icon.
+    -- and number (HeadsUpAuras_UpdateCounter). Part of B like the icon.
     local CT = CreateFrame("Frame", nil, B)
     CT:SetAllPoints(B)
     CT:Hide()
@@ -1135,7 +1119,7 @@ local function CreateIndicator()
     CT.icon = CT:CreateTexture(nil, "ARTWORK")   -- the picture at one end of a counter that is a bar (as high as the bar)
     CT.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     CT.icon:Hide()
-    -- the name and the number: two pieces of text, placed by HeadsUp_UpdateCounter so that they never overlap
+    -- the name and the number: two pieces of text, placed by HeadsUpAuras_UpdateCounter so that they never overlap
     CT.slot = {}
     for _, key in ipairs({ "name", "num" }) do
         local fs = CT:CreateFontString(nil, "OVERLAY")
@@ -1198,7 +1182,7 @@ local function CreateIndicator()
                 local point, _, relPoint, x, y = self:GetPoint(1)
                 ind.cfg.pos = { point, relPoint, x, y }
             end
-            if HeadsUp_PositionChanged then HeadsUp_PositionChanged() end   -- the window shows the new X and Y
+            if HeadsUpAuras_PositionChanged then HeadsUpAuras_PositionChanged() end   -- the window shows the new X and Y
         end
         -- the others of a group stop where they were carried: their new places are saved too
         if ind.groupMove then
@@ -1214,7 +1198,7 @@ local function CreateIndicator()
                     end
                 end
             end
-            if HeadsUp_GroupCommit then HeadsUp_GroupCommit() end   -- a dragged place is kept
+            if HeadsUpAuras_GroupCommit then HeadsUpAuras_GroupCommit() end   -- a dragged place is kept
         end
         RefreshMouse(ind)
         Update(ind)
@@ -1334,7 +1318,7 @@ local function HasCue(cfg)
 end
 
 -- How many enemies are around? Counted from the nameplates of the enemies, a few times a second (RefreshCrowd).
--- The test of 22 Oct 2026 (HeadsUpDB.crowdProbe) found it all readable in the open world. Where the game hides it
+-- It is readable in the open world and in raids. Where the game hides it
 -- (dungeons, probably) crowd.ok stays false and the condition is ignored.
 local crowd = { ok = false, fighting = 0, onMe = 0 }
 
@@ -1370,7 +1354,7 @@ local function RefreshCrowd()
     crowd.ok, crowd.fighting, crowd.onMe, crowd.why = true, fighting, onMe, "ok"
 end
 
-local function ReadableConditionsMet(cfg, lingering)
+local function ReadableConditionsMet(cfg, lingering, skipTarget)
     if CueWaiting(cfg) then return false end
     if cfg.formEnabled then
         local form = GetShapeshiftForm() or 0
@@ -1381,7 +1365,7 @@ local function ReadableConditionsMet(cfg, lingering)
         end
         if spell ~= (cfg.formSpell or 0) then return false end
     end
-    if lingering then return true end
+    if lingering or skipTarget then return true end   -- (skipTarget: "Ignore while it lights up" > the target and the enemies around)
     -- how many enemies are around (needs no target)
     if cfg.crowdEnabled and crowd.ok then
         local n = (cfg.crowdMetric == "me") and crowd.onMe or crowd.fighting
@@ -1455,14 +1439,39 @@ end
 -- "Show it only" rules. With "Ignore the other conditions" it sounds when the ability lights up.
 -- ("The ability is available" can be read when the ability has no cooldown of its own: the game does
 -- tell whether there is enough resource to use it. With a cooldown it cannot be known.)
-local function HasHiddenCondition(cfg, ind)
-    return cfg.healthEnabled or cfg.enemyEnabled or cfg.powerEnabled or cfg.cdEnabled or cfg.chargesEnabled
-        or (cfg.availEnabled and ind.hasCooldown ~= false) or (cfg.otherAuras and cfg.otherAuras[1])
+-- The conditions of an aura that can be ignored while its ability is lit up ("Empowered: active" > "Ignore while it lights up"):
+-- key, the name shown to the player, and whether the aura uses that condition.
+HeadsUpAuras_IgnoreKeys = {
+    { key = "health", label = "Your health", on = function(c) return c.healthEnabled end },
+    { key = "enemy", label = "Enemy health", on = function(c) return c.enemyEnabled end },
+    { key = "avail", label = "Available (enough resource, no cooldown)", on = function(c) return c.availEnabled end },
+    { key = "cooldown", label = "Cooldown", on = function(c) return c.cdEnabled end },
+    { key = "charges", label = "Charges", on = function(c) return c.chargesEnabled end },
+    { key = "power", label = "Main resource", on = function(c) return c.powerEnabled end },
+    { key = "second", label = "Second resource", on = function(c) return c.secEnabled end },
+    { key = "target", label = "Target and enemies around you", on = function(c)
+        return c.enemyAliveEnabled or c.tgtHostileEnabled or c.tgtTypeEnabled or c.tgtClassEnabled or c.threatEnabled or c.crowdEnabled
+    end },
+    { key = "others", label = "Combine with auras", on = function(c) return c.otherAuras and c.otherAuras[1] ~= nil end },
+}
+
+-- The ignored conditions that the aura really uses, as { key = true }; nil when nothing is ignored (or "Empowered: active" is not ticked).
+function HeadsUpAuras_IgnoreActive(cfg)
+    if not (cfg.buffEnabled and cfg.buffState ~= "gone" and cfg.buffIgnore) then return nil end
+    local active
+    for _, item in ipairs(HeadsUpAuras_IgnoreKeys) do
+        if cfg.buffIgnore[item.key] and item.on(cfg) then
+            active = active or {}
+            active[item.key] = true
+        end
+    end
+    return active
 end
 
 -- true: the aura shows now. false: it does not. nil: it cannot be known (no sound).
 local function SoundConditionsMet(cfg, ind)
-    local overrides = cfg.buffEnabled and cfg.buffAlways and cfg.buffState ~= "gone"
+    local ignoring = HeadsUpAuras_IgnoreActive(cfg)
+    local overrides = ignoring ~= nil
     local lit = false
     if cfg.buffEnabled then
         local okL, isLit = pcall(function()
@@ -1470,15 +1479,15 @@ local function SoundConditionsMet(cfg, ind)
         end)
         lit = okL and isLit
     end
-    -- "Ignore the resources": while it is lit the resource conditions do not count (the others do)
+    -- "Ignore while it lights up": while it is lit the ticked conditions do not count (the others do)
     local free = overrides and lit
-    local hidden
-    if free then
-        hidden = cfg.healthEnabled or cfg.enemyEnabled or cfg.cdEnabled or cfg.chargesEnabled
-            or (cfg.availEnabled and ind.hasCooldown ~= false)
-    else
-        hidden = HasHiddenCondition(cfg, ind)
-    end
+    local function ig(key) return free and ignoring[key] end
+    -- a condition that the game hides in combat (and that is not ignored) means the addon cannot know when the aura shows
+    local hidden = (cfg.healthEnabled and not ig("health")) or (cfg.enemyEnabled and not ig("enemy"))
+        or (cfg.powerEnabled and not ig("power")) or (cfg.cdEnabled and not ig("cooldown"))
+        or (cfg.chargesEnabled and not ig("charges"))
+        or (cfg.availEnabled and ind.hasCooldown ~= false and not ig("avail"))
+        or ((cfg.otherAuras and cfg.otherAuras[1]) and not ig("others"))
     if hidden then return nil end
     if not ShowRulesAllow(cfg, ind) then return false end
     if cfg.suppressEnabled then
@@ -1486,13 +1495,13 @@ local function SoundConditionsMet(cfg, ind)
         if running == (cfg.trackShow ~= "while") then return false end
     end
     if cfg.buffEnabled and not overrides and lit ~= (cfg.buffState ~= "gone") then return false end
-    if cfg.availEnabled and not free then   -- (only here when the ability has no cooldown): enough resource to use it?
+    if cfg.availEnabled and not ig("avail") then   -- (only here when the ability has no cooldown): enough resource to use it?
         local okU, usable = pcall(C_Spell.IsSpellUsable, cfg.spellID)
         if not okU or issecretvalue(usable) or not usable then return false end
     end
     local lingering = cfg.lingerEnabled and not inCombat and ind.lingerUntil and GetTime() < ind.lingerUntil
-    if not ReadableConditionsMet(cfg, lingering) then return false end
-    if cfg.secEnabled and ind.secType and not free then
+    if not ReadableConditionsMet(cfg, lingering, ig("target")) then return false end
+    if cfg.secEnabled and ind.secType and not ig("second") then
         local count = SecondaryCount(ind.secType)
         if count == nil or not Compare(count, cfg.secOp, cfg.secValue or 1) then return false end
     end
@@ -1520,7 +1529,7 @@ local function UpdateSound(ind)
         local now = GetTime()
         if not ind.lastSound or now - ind.lastSound > 0.5 then
             ind.lastSound = now
-            HeadsUp_PlaySound(cfg.soundKey, cfg.soundVolume)
+            HeadsUpAuras_PlaySound(cfg.soundKey, cfg.soundVolume)
         end
     end
     ind.soundOn = met
@@ -1606,7 +1615,7 @@ end
 
 -- How many frames the row needs, or nil when it is not supported.
 local function CrossNeeds(c, x, state)
-    if c.buffAlways and c.buffEnabled and c.buffState ~= "gone" then return nil end
+    if HeadsUpAuras_IgnoreActive(c) then return nil end   -- (an aura that ignores conditions cannot be a row of "Combine with auras")
     local n = #SecretFactors(c, x)
     if state == "active" then return math.max(1, n) end
     if n > 1 then return nil end
@@ -1614,7 +1623,7 @@ local function CrossNeeds(c, x, state)
 end
 
 -- The settings window asks: how many of the three frames does a row for this aura need? nil = not supported
-function HeadsUp_CrossNeeds(uid, state)
+function HeadsUpAuras_CrossNeeds(uid, state)
     local x = FindIndicatorByUid(uid)
     if not x or not x.cfg then return 0 end
     return CrossNeeds(x.cfg, x, state == "active" and "active" or "inactive")
@@ -1675,7 +1684,7 @@ local function UpdateVisual(ind)
     local placingNow = ind.editing or ind.preview
     local notForMe
     if cfg and cfg.kind == "counter" then
-        notForMe = not HeadsUp_CounterAllowed(cfg, placingNow)   -- (a counter may be for every character, or by profession)
+        notForMe = not HeadsUpAuras_CounterAllowed(cfg, placingNow)   -- (a counter may be for every character, or by profession)
     else
         notForMe = cfg and (cfg.class ~= playerClass or (cfg.specs and not cfg.specs[currentSpec] and not placingNow))
     end
@@ -1688,7 +1697,7 @@ local function UpdateVisual(ind)
     end
     A:Show()
     ind.R:Show()
-    if cfg.kind == "counter" then HeadsUp_UpdateCounter(ind) end
+    if cfg.kind == "counter" then HeadsUpAuras_UpdateCounter(ind) end
     local placing = ind.editing or ind.preview or ind.dragging
     ind.hint:SetShown(placing)
     if placing then
@@ -1741,21 +1750,22 @@ local function UpdateVisual(ind)
         end
     end
     local ok, err = pcall(function()
-        -- "Ignore the resources" (Empowered + buffAlways): while the ability is lit up it costs nothing (or is stronger), so the
-        -- conditions about resources (the cost, the main resource, the second resource) do not count. Every other
-        -- condition (health, enemies, target, cooldown, charges...) still counts. The rows of "Combine with auras" (auras that compete for
-        -- the same resources) are ignored too while it is free.
+        -- "Ignore while it lights up" (Empowered: active + the ticked conditions): while the ability is lit up, the ticked conditions
+        -- (health, resources, target, cooldown...) do not count, because the glow already tells that it is the moment to use it.
+        -- Every other condition (and "Show it only", and the specializations) still counts.
+        local ignoring = HeadsUpAuras_IgnoreActive(cfg)
         local free = false
-        if cfg.buffEnabled and cfg.buffAlways and cfg.buffState ~= "gone" and cfg.spellID then
+        if ignoring and cfg.spellID then
             local okF, litF = pcall(function() return C_SpellActivationOverlay.IsSpellOverlayed(cfg.spellID) and true or false end)
             free = (okF and litF) and true or false
         end
-        if cfg.healthEnabled then
+        local function ig(key) return free and ignoring[key] end
+        if cfg.healthEnabled and not ig("health") then
             A:SetAlpha(UnitHealthPercent("player", true, ind.healthCurve))
         else
             A:SetAlpha(1)
         end
-        if cfg.availEnabled and ind.powerType and not free then
+        if cfg.availEnabled and ind.powerType and not ig("avail") then
             C:SetAlpha(UnitPowerPercent("player", ind.powerType, false, ind.powerCurve))
         else
             C:SetAlpha(1)
@@ -1764,7 +1774,7 @@ local function UpdateVisual(ind)
         -- the target is gone (it just died) and we are walking to the next one.
         local lingering = cfg.lingerEnabled and not inCombat and ind.lingerUntil
             and GetTime() < ind.lingerUntil
-        if cfg.enemyEnabled and not lingering then
+        if cfg.enemyEnabled and not lingering and not ig("enemy") then
             -- no hostile target selected -> the condition is simply not met
             if UnitExists("target") and UnitCanAttack("player", "target") then
                 E:SetAlpha(UnitHealthPercent("target", true, ind.enemyCurve))
@@ -1774,7 +1784,7 @@ local function UpdateVisual(ind)
         else
             E:SetAlpha(1)
         end
-        if cfg.cdEnabled and ind.cdDuration then
+        if cfg.cdEnabled and ind.cdDuration and not ig("cooldown") then
             -- re-evaluated about 10x a second: a cooldown ending fires no event
             F:SetAlpha(ind.cdDuration:EvaluateRemainingDuration(ind.cdCurve))
         else
@@ -1782,7 +1792,7 @@ local function UpdateVisual(ind)
         end
         -- "any": a charge is ready (the ability is not on cooldown); "full": nothing is recharging
         local chargeSource = (cfg.chargesState == "full") and ind.chargeDuration or ind.cdDuration
-        if cfg.chargesEnabled and chargeSource then
+        if cfg.chargesEnabled and chargeSource and not ig("charges") then
             G:SetAlpha(chargeSource:EvaluateRemainingDuration(ind.readyCurve))
         else
             G:SetAlpha(1)
@@ -1793,8 +1803,8 @@ local function UpdateVisual(ind)
         -- ability. It does not matter which action bar the ability is on: the glow belongs to
         -- the ability itself. "active" = lit up, "gone" = not lit up.
         local glowSpell = cfg.spellID   -- always this aura's own ability
-        -- "Ignore the other conditions" (buffAlways) only counts with "Empowered: active" ticked
-        local overrides = cfg.buffEnabled and cfg.buffAlways and cfg.buffState ~= "gone"
+        -- with something ignored ("Empowered: active" is ticked) the glow is not required: the aura also shows without it, if all its conditions hold
+        local overrides = ignoring ~= nil
         if cfg.buffEnabled and not overrides and glowSpell then
             local okL, lit = pcall(function()
                 return C_SpellActivationOverlay.IsSpellOverlayed(glowSpell) and true or false
@@ -1804,12 +1814,6 @@ local function UpdateVisual(ind)
             H:SetAlpha((lit == want) and 1 or 0)
             -- the Empowered effect: only while the ability is lit up and "active" was chosen
             SetFx(ind.faces[1], lit and want and true or false)
-            if HeadsUpDB then   -- log: lets us see how reliable the reading is, in and out of combat
-                local key = (inCombat and "combat_" or "ooc_") .. (not okL and "blocked" or (lit and "lit" or "unlit"))
-                local stats = HeadsUpDB.litStats or {}
-                HeadsUpDB.litStats = stats
-                stats[key] = (stats[key] or 0) + 1
-            end
         else
             H:SetAlpha(1)
             SetFx(ind.faces[1], free)   -- (with "ignore the resources" the effect shows while it is lit)
@@ -1818,22 +1822,22 @@ local function UpdateVisual(ind)
         ind.R:SetAlpha(0)
         SetFx(ind.faces[2], false)
         -- "the enemy (my target) is alive / dead": needs a hostile target; none = not met
-        J:SetAlpha(ReadableConditionsMet(cfg, lingering) and 1 or 0)
+        J:SetAlpha(ReadableConditionsMet(cfg, lingering, ig("target")) and 1 or 0)
         -- "the ability is available": the cost part is the C frame above; here the cooldown part
         -- (the global cooldown is ignored, a charge left counts as available)
-        if cfg.availEnabled and ind.cdDuration then
+        if cfg.availEnabled and ind.cdDuration and not ig("avail") then
             M:SetAlpha(ind.cdDuration:EvaluateRemainingDuration(ind.readyCurve))
         else
             M:SetAlpha(1)
         end
         -- the main resource (runic power, mana, ...): a value wired to a display, never compared
-        if cfg.powerEnabled and ind.primaryType and ind.primaryCurve and not free then
+        if cfg.powerEnabled and ind.primaryType and ind.primaryCurve and not ig("power") then
             P:SetAlpha(UnitPowerPercent("player", ind.primaryType, false, ind.primaryCurve))
         else
             P:SetAlpha(1)
         end
         -- the second resource (runes, holy power, ...): a plain number, so we can compare it
-        if cfg.secEnabled and ind.secType and not free then
+        if cfg.secEnabled and ind.secType and not ig("second") then
             local count = SecondaryCount(ind.secType)
             local met = count ~= nil and Compare(count, cfg.secOp, cfg.secValue or 1)
             S:SetAlpha(met and 1 or 0)
@@ -1843,7 +1847,7 @@ local function UpdateVisual(ind)
         -- "only if another aura is active / not active": the frames K1..K3
         -- (these rows are about auras that compete for the same resources: while the ability is free they are ignored)
         local nextFrame = 1
-        if not free then
+        if not ig("others") then
             for _, row in ipairs(cfg.otherAuras or {}) do
                 nextFrame = ApplyCrossRow(ind, row, nextFrame)
             end
@@ -1852,8 +1856,8 @@ local function UpdateVisual(ind)
     end)
     if not ok and not errorShown then
         errorShown = true
-        LogError("HeadsUp Update: " .. tostring(err))
-        print("|cffff8800HeadsUp:|r error: " .. tostring(err))
+        LogError("HeadsUp Auras Update: " .. tostring(err))
+        print("|cffff8800HeadsUp Auras:|r error: " .. tostring(err))
     end
 end
 
@@ -1865,7 +1869,7 @@ end
 -- Rebuild everything that depends on the aura's settings.
 -- the Empowered effect an aura really has: "auto" follows the specialization of the aura (the one it belongs
 -- to, or else the one played now)
-function HeadsUp_ResolveFx(cfg)
+function HeadsUpAuras_ResolveFx(cfg)
     local style = cfg.empowerFx
     if style == "auto" then
         local spec = currentSpec
@@ -1881,23 +1885,16 @@ function HeadsUp_ResolveFx(cfg)
     return style
 end
 
--- The counter: how many of an item are in the bags (not the bank), written as text. Every reading is counted in
--- HeadsUpDB.itemProbe (combat_readable / combat_secret ...), so the log file shows whether the game lets us read it in combat.
+-- The counter: how many of an item (bags, optionally the bank) or of a currency, written as text.
 -- Each piece (picture, name, number) goes where the aura says; pieces in the same place go side by side.
-function HeadsUp_UpdateCounter(ind)
+function HeadsUpAuras_UpdateCounter(ind)
     local cfg, CT = ind.cfg, ind.CT
     if not cfg or cfg.kind ~= "counter" or not CT then return end
-    local id = HeadsUp_SubjectID(cfg)
+    local id = HeadsUpAuras_SubjectID(cfg)
     local count
     if id then
-        local ok, n = pcall(HeadsUp_ReadCount, cfg)
+        local ok, n = pcall(HeadsUpAuras_ReadCount, cfg)
         local kind = (not ok and "error") or (n == nil and "nil") or (issecretvalue(n) and "secret") or "readable"
-        if HeadsUpDB then
-            local stats = HeadsUpDB.itemProbe or {}
-            HeadsUpDB.itemProbe = stats
-            local key = (inCombat and "combat_" or "ooc_") .. kind
-            stats[key] = (stats[key] or 0) + 1
-        end
         if kind == "readable" then count = n end
     end
     local size = ind.ctSize or 12
@@ -1926,7 +1923,7 @@ function HeadsUp_UpdateCounter(ind)
         local padLeft, padRight = 2, 2
         local iconAt = (cfg.ctIcon == "right") and "right" or ((cfg.ctIcon ~= "off") and "left" or nil)
         if iconAt and id then
-            local _, picture = HeadsUp_SubjectFacts(cfg)
+            local _, picture = HeadsUpAuras_SubjectFacts(cfg)
             if picture then
                 local px = math.max(8, height - 1)
                 CT.icon:SetTexture(picture)
@@ -1954,9 +1951,15 @@ function HeadsUp_UpdateCounter(ind)
         if nameAt and nameAt ~= "off" then
             -- the name that was typed for the aura (by default the real name of the item)
             local name = cfg.name
-            if not name or name == "" then name = HeadsUp_SubjectFacts(cfg) end
+            if not name or name == "" then name = HeadsUpAuras_SubjectFacts(cfg) end
+            name = name or (id and ("Item " .. id)) or "Item"
+            -- an item of a quality (1 to 5 stars): the quality is written after the name, unless the name already ends with it ("... Q2")
+            if cfg.ctType ~= "currency" and id then
+                local q = HeadsUpAuras_ItemQuality(id)
+                if q and not name:find("Q" .. q .. "$") then name = name .. " " .. HeadsUpAuras_QualityMark(q, size) end
+            end
             nameFs:SetWidth(0)
-            nameFs:SetText(name or (id and ("Item " .. id)) or "Item")
+            nameFs:SetText(name)
             wn = nameFs:GetStringWidth() or 0
             -- how wide the name may be: it must stay clear of the number (and keep a gap)
             if nameAt == numAt then
@@ -2017,7 +2020,7 @@ end
 -- the progress bar: where the track, the fill and the small icon sit
 local function ApplyBar(ind, cfg, width, height)
     local bar = ind.bar
-    if cfg.shape ~= "bar" or cfg.kind == "counter" then   -- (the bar of a counter is made by its own text, see HeadsUp_UpdateCounter)
+    if cfg.shape ~= "bar" or cfg.kind == "counter" then   -- (the bar of a counter is made by its own text, see HeadsUpAuras_UpdateCounter)
         bar:Hide()
         return
     end
@@ -2069,8 +2072,8 @@ end
 -- Does casting the spell with this name also start the timer of this aura? Some abilities put the same effect
 -- on the enemy as another one (Divine Toll casts Judgment): KnownDurations.lua lists them.
 local function AlsoStartedBy(cfg, castName)
-    if not castName or not cfg.spellID or not HeadsUpAlsoStartedBy then return false end
-    local byClass = HeadsUpAlsoStartedBy[playerClass]
+    if not castName or not cfg.spellID or not HeadsUpAurasAlsoStartedBy then return false end
+    local byClass = HeadsUpAurasAlsoStartedBy[playerClass]
     local own = SpellNameOf(cfg.spellID)
     local others = byClass and own and byClass[own]
     if not others then return false end
@@ -2096,7 +2099,7 @@ local function ApplyConfig(ind)
     local effect = cfg.effect or "none"
     local strata = STRATA[cfg.layer] or STRATA[3]
     -- the look of the effect: "auto" follows the specialization of the aura (the one it belongs to, else the one played now)
-    local fxStyle = HeadsUp_ResolveFx(cfg)
+    local fxStyle = HeadsUpAuras_ResolveFx(cfg)
     for _, face in ipairs(ind.faces) do   -- the main icon and the "always when empowered" one look the same
         -- the shape: a round icon is the picture cut to a circle, a round cooldown, a rim of the style of the effect
         if round then
@@ -2173,7 +2176,7 @@ local function ApplyConfig(ind)
         ind.CT.hasBg = bgAlpha > 0
         if counterShape == "icon" then
             -- the picture of the item, cut to fit (like an ability's picture)
-            local picture = select(2, HeadsUp_SubjectFacts(cfg)) or cfg.icon
+            local picture = select(2, HeadsUpAuras_SubjectFacts(cfg)) or cfg.icon
             local left, right, top, bottom = 0, 1, 0, 1
             if width > height then
                 top = (1 - height / width) / 2
@@ -2187,7 +2190,7 @@ local function ApplyConfig(ind)
                 face.tex:SetTexCoord(left, right, top, bottom)
             end
         end
-        HeadsUp_UpdateCounter(ind)
+        HeadsUpAuras_UpdateCounter(ind)
     end
     -- display priority: a higher layer is drawn above the lower ones
     for _, part in ipairs(ind.parts) do part:SetFrameStrata(strata) end
@@ -2282,11 +2285,11 @@ end
 -- API used by the settings window
 ---------------------------------------------------------------------------
 
-function HeadsUp_GetAuras() return auras end
+function HeadsUpAuras_GetAuras() return auras end
 
 -- An item from what the player typed or dragged: an item id, an item link, or a name (a name works only for an item the
 -- game already knows, like one in the bags). Returns the item id, or nil.
-function HeadsUp_ResolveItem(text)
+function HeadsUpAuras_ResolveItem(text)
     text = strtrim(tostring(text or ""))
     if text == "" then return nil end
     local ok, id = pcall(C_Item.GetItemInfoInstant, tonumber(text) or text)
@@ -2295,7 +2298,7 @@ function HeadsUp_ResolveItem(text)
 end
 
 -- Who sees a counter, and who has it in the list. The character is known by its name and realm.
-function HeadsUp_CharKey()
+function HeadsUpAuras_CharKey()
     return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
 end
 
@@ -2309,7 +2312,7 @@ local PROFESSION_BY_SUBCLASS = {
     [9] = { [182] = "Herbalism" },
     [8] = { [356] = "Fishing", [185] = "Cooking" },
 }
-function HeadsUp_ItemProfessions(itemID)
+function HeadsUpAuras_ItemProfessions(itemID)
     if not itemID then return nil end
     local ok, _, _, _, _, _, classID, subclassID = pcall(C_Item.GetItemInfoInstant, itemID)
     if ok and classID == 7 then return PROFESSION_BY_SUBCLASS[subclassID] end
@@ -2330,34 +2333,34 @@ local function HasProfession(lines)
 end
 
 -- may this character show the counter? (placing: while it is being placed it shows for every choice but another class)
-function HeadsUp_CounterAllowed(cfg, placing)
+function HeadsUpAuras_CounterAllowed(cfg, placing)
     local who = cfg.ctWho or "spec"
     if who == "all" then return true end
-    if who == "char" then return cfg.ctChar == nil or cfg.ctChar == HeadsUp_CharKey() end
+    if who == "char" then return cfg.ctChar == nil or cfg.ctChar == HeadsUpAuras_CharKey() end
     if who == "prof" then
-        local lines = HeadsUp_ItemProfessions(cfg.itemID)
+        local lines = HeadsUpAuras_ItemProfessions(cfg.itemID)
         return placing or lines == nil or HasProfession(lines)
     end
     return cfg.class == playerClass and (placing or not cfg.specs or cfg.specs[currentSpec] and true or false)
 end
 
 -- is the aura in the list of this character? (an ability: of its class; a counter: by who it is for)
-function HeadsUp_AuraListed(a)
+function HeadsUpAuras_AuraListed(a)
     if a.kind == "counter" then
         local who = a.ctWho or "spec"
         if who == "all" or who == "prof" then return true end
-        if who == "char" then return a.ctChar == nil or a.ctChar == HeadsUp_CharKey() end
+        if who == "char" then return a.ctChar == nil or a.ctChar == HeadsUpAuras_CharKey() end
     end
     return a.class == playerClass
 end
 
 -- What a counter counts: its id (an item or a currency), how many there are, and its name and picture.
-function HeadsUp_SubjectID(cfg)
+function HeadsUpAuras_SubjectID(cfg)
     if cfg.ctType == "currency" then return cfg.currencyID end
     return cfg.itemID
 end
 
-function HeadsUp_ReadCount(cfg)
+function HeadsUpAuras_ReadCount(cfg)
     if cfg.ctType == "currency" then
         local info = C_CurrencyInfo.GetCurrencyInfo(cfg.currencyID)
         return info and info.quantity
@@ -2368,17 +2371,17 @@ function HeadsUp_ReadCount(cfg)
 end
 
 -- name, picture (nil for what is not known yet: the name of an item arrives a moment after the first request)
-function HeadsUp_SubjectFacts(cfg)
+function HeadsUpAuras_SubjectFacts(cfg)
     if cfg.ctType == "currency" then
         local info = cfg.currencyID and C_CurrencyInfo.GetCurrencyInfo(cfg.currencyID)
         return info and info.name, info and info.iconFileID
     end
-    return HeadsUp_ItemFacts(cfg.itemID)
+    return HeadsUpAuras_ItemFacts(cfg.itemID)
 end
 
 -- Every currency of the character: { { id, name, icon, quantity }, ... } sorted by name. The list of the currency window has
 -- collapsed headers: they are opened for a moment and closed again, so the window looks as it did.
-function HeadsUp_ListCurrencies()
+function HeadsUpAuras_ListCurrencies()
     local out = {}
     pcall(function()
         local opened = {}
@@ -2416,7 +2419,7 @@ end
 
 -- What the player typed, pasted (a link) or dropped: an item or a currency. Returns "item" or "currency", and the id; nil if it
 -- is not known. A name is looked for among the items the game knows, then among the currencies of the character.
-function HeadsUp_ResolveSubject(text)
+function HeadsUpAuras_ResolveSubject(text)
     text = strtrim(tostring(text or ""))
     if text == "" then return nil end
     local cid = text:match("currency:(%d+)")
@@ -2431,16 +2434,16 @@ function HeadsUp_ResolveSubject(text)
     if n then
         -- (the ids of currencies are small numbers: a small id that is a currency is taken as one)
         if n < 10000 and currencyName(n) then return "currency", n end
-        local id = HeadsUp_ResolveItem(text)
+        local id = HeadsUpAuras_ResolveItem(text)
         if id then return "item", id end
         if currencyName(n) then return "currency", n end
         return nil
     end
-    local id = HeadsUp_ResolveItem(text)
+    local id = HeadsUpAuras_ResolveItem(text)
     if id then return "item", id end
     local wanted = text:lower()
     local partial
-    for _, c in ipairs(HeadsUp_ListCurrencies()) do
+    for _, c in ipairs(HeadsUpAuras_ListCurrencies()) do
         local name = c.name:lower()
         if name == wanted then return "currency", c.id end
         if not partial and name:find(wanted, 1, true) then partial = c.id end
@@ -2449,8 +2452,34 @@ function HeadsUp_ResolveSubject(text)
     return nil
 end
 
+-- The quality of a crafting material or of a crafted item (the 1 to 5 stars the game writes in a small badge): the same name can
+-- be several items, one for each quality. nil when the item has no such quality.
+function HeadsUpAuras_ItemQuality(itemID)
+    if not itemID or not C_TradeSkillUI then return nil end
+    for _, fn in ipairs({ "GetItemReagentQualityByItemInfo", "GetItemCraftedQualityByItemInfo" }) do
+        local f = C_TradeSkillUI[fn]
+        if f then
+            local ok, q = pcall(f, itemID)
+            if ok and type(q) == "number" and q > 0 then return q end
+        end
+    end
+    return nil
+end
+
+-- the quality as small text next to a name: the badge of the game when it exists, else "Q2"
+function HeadsUpAuras_QualityMark(q, size)
+    if not q then return "" end
+    local atlas = "Professions-ChatIcon-Quality-Tier" .. q
+    local okInfo, info = pcall(function() return C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas) end)
+    if okInfo and info then
+        size = size or 16
+        return "|A:" .. atlas .. ":" .. size .. ":" .. size .. "|a"
+    end
+    return "Q" .. q
+end
+
 -- the name and the picture of an item: nil for what is not known yet (the name arrives a moment after the first request)
-function HeadsUp_ItemFacts(id)
+function HeadsUpAuras_ItemFacts(id)
     if not id then return nil, nil end
     local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
     if not name then C_Item.RequestLoadItemDataByID(id) end
@@ -2458,15 +2487,15 @@ function HeadsUp_ItemFacts(id)
 end
 
 -- Abilities seen lighting up for the current class + specialization: { [spellID] = times seen }
-function HeadsUp_GetLearned()
-    local learned = HeadsUpDB and HeadsUpDB.learned
+function HeadsUpAuras_GetLearned()
+    local learned = HeadsUpAurasDB and HeadsUpAurasDB.learned
     local forClass = learned and learned[playerClass]
     return (forClass and currentSpec and forClass[currentSpec]) or {}
 end
-function HeadsUp_GetPlayerClass() return playerClass end
-function HeadsUp_GetResources() return GetResources() end
-function HeadsUp_GetDraft() return draft end
-function HeadsUp_GetEditIndex() return editIndex end
+function HeadsUpAuras_GetPlayerClass() return playerClass end
+function HeadsUpAuras_GetResources() return GetResources() end
+function HeadsUpAuras_GetDraft() return draft end
+function HeadsUpAuras_GetEditIndex() return editIndex end
 
 local function SpellName(spellID)
     local info = spellID and C_Spell.GetSpellInfo(spellID)
@@ -2489,7 +2518,7 @@ local function UniqueName(name, exceptIndex)
     return base .. " " .. n
 end
 
-function HeadsUp_UniqueName(name, exceptIndex)
+function HeadsUpAuras_UniqueName(name, exceptIndex)
     return UniqueName(name, exceptIndex)
 end
 
@@ -2512,7 +2541,7 @@ local function NormalizeNames()
 end
 
 -- Rename a saved aura right away (also updates the draft if it is being edited).
-function HeadsUp_RenameAura(index, name)
+function HeadsUpAuras_RenameAura(index, name)
     if not auras[index] then return end
     if not name or name == "" then name = SpellName(auras[index].spellID) or "Aura" end
     name = UniqueName(name, index)
@@ -2522,7 +2551,7 @@ end
 
 -- True when the draft has changes that were not saved yet. For a brand-new aura that means
 -- an ability was already chosen; for an existing one, any setting differs from the saved copy.
-function HeadsUp_IsDirty()
+function HeadsUpAuras_IsDirty()
     if not draft then return false end
     if not editIndex then return draft.spellID ~= nil end
     local saved = auras[editIndex]
@@ -2558,7 +2587,7 @@ function HeadsUp_IsDirty()
             for i = 1, 3 do
                 if a[i] ~= b[i] then return true end
             end
-        elseif k == "showRules" or k == "tgtClass" then
+        elseif k == "showRules" or k == "tgtClass" or k == "buffIgnore" then
             local a, b = draft[k] or {}, saved[k] or {}
             for rule, on in pairs(a) do
                 if (b[rule] and true or false) ~= (on and true or false) then return true end
@@ -2576,7 +2605,7 @@ function HeadsUp_IsDirty()
 end
 
 -- Snapshot of every aura's live state, for the log file (what the add-on sees right now).
-function HeadsUp_DebugState()
+function HeadsUpAuras_DebugState()
     local out = {}
     local function Safe(fn, ...)
         local ok, v = pcall(fn, ...)
@@ -2619,7 +2648,7 @@ function HeadsUp_DebugState()
             if a.chargesEnabled then on[#on + 1] = "charges" end
             if a.suppressEnabled then on[#on + 1] = "hideTimer" end
             if a.buffEnabled then on[#on + 1] = "empowered" end
-            if a.buffEnabled and a.buffAlways then on[#on + 1] = "empoweredIgnoresOthers" end
+            if HeadsUpAuras_IgnoreActive(a) then on[#on + 1] = "empoweredIgnoresOthers" end
             if a.showWhenEnabled then
                 local rules = {}
                 for rule, v in pairs(a.showRules or {}) do if v then rules[#rules + 1] = rule end end
@@ -2650,11 +2679,11 @@ end
 -- Preview = selected in the list: the placeholder is shown (and draggable) so several
 -- auras can be arranged together on screen. Selection lives on the indicators themselves,
 -- so it stays correct when an aura is deleted and the list shifts.
-function HeadsUp_IsPreview(index)
+function HeadsUpAuras_IsPreview(index)
     return pool[index] and pool[index].preview or false
 end
 
-function HeadsUp_PreviewCount()
+function HeadsUpAuras_PreviewCount()
     local n = 0
     for i = 1, #auras do
         if pool[i] and pool[i].preview then n = n + 1 end
@@ -2662,7 +2691,7 @@ function HeadsUp_PreviewCount()
     return n
 end
 
-function HeadsUp_SetPreview(index, on)
+function HeadsUpAuras_SetPreview(index, on)
     if not auras[index] then return end
     local ind = GetPooled(index)
     ind.preview = on and true or false
@@ -2670,13 +2699,13 @@ function HeadsUp_SetPreview(index, on)
     Update(ind)
 end
 
-local groupMoveId   -- the group that is shown on the screen to be moved as one (see HeadsUp_SetGroupMove)
+local groupMoveId   -- the group that is shown on the screen to be moved as one (see HeadsUpAuras_SetGroupMove)
 local groupMoveList -- the indicators of that group
 local groupAnchor = "C"   -- the dot of the box of the group that places it: TL, TR, BL, BR (corners) or C (centre)
 local groupBox      -- the box with the five dots, drawn on the screen around the group (made when needed)
 local groupSnap     -- the places the auras of the group had before a typed move (nil = nothing to put back)
 
-function HeadsUp_ClearPreviews()
+function HeadsUpAuras_ClearPreviews()
     for _, ind in pairs(pool) do
         ind.groupMove = nil
         if ind.plain then
@@ -2689,14 +2718,14 @@ function HeadsUp_ClearPreviews()
             Update(ind)
         end
     end
-    HeadsUp_GroupRestore()   -- a typed move that was not kept goes back
+    HeadsUpAuras_GroupRestore()   -- a typed move that was not kept goes back
     groupMoveId = nil
     groupMoveList = nil
     if groupBox then groupBox:Hide() end
 end
 
 -- Hide / show a saved aura right away (hidden = kept, but it never appears in game).
-function HeadsUp_SetHidden(index, hidden)
+function HeadsUpAuras_SetHidden(index, hidden)
     if not auras[index] then return end
     hidden = hidden and true or nil
     auras[index].hidden = hidden
@@ -2715,7 +2744,7 @@ end
 
 -- Make an exact copy of a saved aura (same settings, same place). It gets a free name ("Death Strike 2")
 -- and is active, even if the original is hidden. Returns the index of the copy.
-function HeadsUp_DuplicateAura(index)
+function HeadsUpAuras_DuplicateAura(index)
     local source = auras[index]
     if not source then return nil end
     local copy = CopyConfig(source)
@@ -2735,7 +2764,7 @@ end
 -- ability is cast, and it shows while the timer is NOT running (the enemy has lost the effect). The original
 -- aura waits for the effect to end (the tracker's option "trackerCue").
 -- seconds = how long the effect lasts (a suggestion from the description of the ability). Returns the new index.
-function HeadsUp_CreateTracker(index, seconds)
+function HeadsUpAuras_CreateTracker(index, seconds)
     local source = auras[index]
     if not source or source.trackerOf then return nil end
     local t = CopyConfig(source)
@@ -2747,6 +2776,7 @@ function HeadsUp_CreateTracker(index, seconds)
         "availEnabled", "buffEnabled", "buffAlways", "soundEnabled" }) do
         t[k] = false
     end
+    t.buffIgnore = {}
     t.kind, t.trackShow = "ability", "hide"
     if t.shape == "bar" then t.shape = "square" end
     t.suppressEnabled = true
@@ -2772,22 +2802,22 @@ function HeadsUp_CreateTracker(index, seconds)
 end
 
 ---------------------------------------------------------------------------
--- Groups of auras: a group is { id, name } in HeadsUpDB.groups. An aura belongs to at most one group (its `group` field is
+-- Groups of auras: a group is { id, name } in HeadsUpAurasDB.groups. An aura belongs to at most one group (its `group` field is
 -- the id of the group). A group is moved with the mouse as one, and deactivated and activated together.
 ---------------------------------------------------------------------------
 local function GroupList()
-    HeadsUpDB.groups = HeadsUpDB.groups or {}
-    return HeadsUpDB.groups
+    HeadsUpAurasDB.groups = HeadsUpAurasDB.groups or {}
+    return HeadsUpAurasDB.groups
 end
 
-function HeadsUp_GetGroups()
-    if not HeadsUpDB then return {} end
+function HeadsUpAuras_GetGroups()
+    if not HeadsUpAurasDB then return {} end
     return GroupList()
 end
 
 -- a group needs at least two auras: with fewer it goes away (the aura that is left is free); an aura of a group that does not exist is free
-function HeadsUp_PruneGroups()
-    if not HeadsUpDB then return end
+function HeadsUpAuras_PruneGroups()
+    if not HeadsUpAurasDB then return end
     local groups = GroupList()
     local used = {}
     for _, a in ipairs(auras) do
@@ -2804,7 +2834,7 @@ function HeadsUp_PruneGroups()
 end
 
 -- the auras of the list uids are the members of the group id (the ones that were in it before and are not in the list leave)
-function HeadsUp_SetGroupMembers(id, uids)
+function HeadsUpAuras_SetGroupMembers(id, uids)
     local want = {}
     for _, uid in ipairs(uids) do want[uid] = true end
     for _, a in ipairs(auras) do
@@ -2814,50 +2844,50 @@ function HeadsUp_SetGroupMembers(id, uids)
             a.group = nil
         end
     end
-    HeadsUp_PruneGroups()
+    HeadsUpAuras_PruneGroups()
 end
 
 -- put the saved aura (its position in the list) into the group id
-function HeadsUp_AddToGroup(index, id)
+function HeadsUpAuras_AddToGroup(index, id)
     if auras[index] then auras[index].group = id end
 end
 
-function HeadsUp_CreateGroup(name, uids)
+function HeadsUpAuras_CreateGroup(name, uids)
     local id = NewUid()
     table.insert(GroupList(), { id = id, name = name })
-    HeadsUp_SetGroupMembers(id, uids)
+    HeadsUpAuras_SetGroupMembers(id, uids)
     return id
 end
 
-function HeadsUp_RenameGroup(id, name)
+function HeadsUpAuras_RenameGroup(id, name)
     for _, g in ipairs(GroupList()) do
         if g.id == id then g.name = name end
     end
 end
 
 -- open / close a group in the list (closed: only its header is shown)
-function HeadsUp_ToggleGroupCollapsed(id)
+function HeadsUpAuras_ToggleGroupCollapsed(id)
     for _, g in ipairs(GroupList()) do
         if g.id == id then g.collapsed = (not g.collapsed) or nil end
     end
 end
 
 -- the colour of the header of a group in the list: { r, g, b } (nil = the usual one)
-function HeadsUp_SetGroupColor(id, rgb)
+function HeadsUpAuras_SetGroupColor(id, rgb)
     for _, g in ipairs(GroupList()) do
         if g.id == id then g.color = rgb end
     end
 end
 
-function HeadsUp_Ungroup(id)
+function HeadsUpAuras_Ungroup(id)
     for _, a in ipairs(auras) do
         if a.group == id then a.group = nil end
     end
-    HeadsUp_PruneGroups()
+    HeadsUpAuras_PruneGroups()
 end
 
 -- the positions (in the list of the saved auras) of the members of a group
-function HeadsUp_GroupMembers(id)
+function HeadsUpAuras_GroupMembers(id)
     local list = {}
     for i, a in ipairs(auras) do
         if a.group == id then list[#list + 1] = i end
@@ -2866,14 +2896,14 @@ function HeadsUp_GroupMembers(id)
 end
 
 -- deactivate / activate all the auras of a group
-function HeadsUp_SetGroupHidden(id, hidden)
-    for _, i in ipairs(HeadsUp_GroupMembers(id)) do
-        HeadsUp_SetHidden(i, hidden)
+function HeadsUpAuras_SetGroupHidden(id, hidden)
+    for _, i in ipairs(HeadsUpAuras_GroupMembers(id)) do
+        HeadsUpAuras_SetHidden(i, hidden)
     end
 end
 
 -- The box of a group on the screen: a frame around all the auras of the group, with a dot in each of the four corners, one in the
--- middle of each of the four edges, and one in the centre. The dot that is chosen (red) is the one that places the group (HeadsUp_GroupMoveTo).
+-- middle of each of the four edges, and one in the centre. The dot that is chosen (red) is the one that places the group (HeadsUpAuras_GroupMoveTo).
 local ANCHOR_NAMES = {
     TL = "top left corner", TR = "top right corner", BL = "bottom left corner", BR = "bottom right corner",
     T = "middle of the top edge", B = "middle of the bottom edge", L = "middle of the left edge", R = "middle of the right edge",
@@ -2941,8 +2971,8 @@ local function EnsureGroupBox()
         elseif key == "R" then d:SetPoint("CENTER", box, "RIGHT")
         else d:SetPoint("CENTER", box, "CENTER") end
         d:SetScript("OnClick", function(self)
-            HeadsUp_SetGroupAnchor(self.key)
-            if HeadsUp_OnGroupDotClicked then HeadsUp_OnGroupDotClicked() end   -- opens the Position window (Settings.lua)
+            HeadsUpAuras_SetGroupAnchor(self.key)
+            if HeadsUpAuras_OnGroupDotClicked then HeadsUpAuras_OnGroupDotClicked() end   -- opens the Position window (Settings.lua)
         end)
         d:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -2975,16 +3005,16 @@ local function EnsureGroupBox()
     return box
 end
 
-function HeadsUp_SetGroupAnchor(key)
+function HeadsUpAuras_SetGroupAnchor(key)
     if ANCHOR_NAMES[key] then groupAnchor = key end
 end
 
-function HeadsUp_GetGroupAnchor()
+function HeadsUpAuras_GetGroupAnchor()
     return groupAnchor
 end
 
 -- where the chosen dot is now: X and Y from the centre of the screen (X to the right, Y upwards); nil if no group is shown
-function HeadsUp_GroupAnchorPos()
+function HeadsUpAuras_GroupAnchorPos()
     local l, b, r, t = GroupRect()
     local ux, uy = UIParent:GetCenter()
     if not l or not ux then return nil end
@@ -2998,13 +3028,13 @@ function HeadsUp_GroupAnchorPos()
 end
 
 -- put the chosen dot at X, Y (from the centre of the screen): every aura of the group moves by the same distance
-function HeadsUp_GroupMoveTo(x, y)
-    local cx, cy = HeadsUp_GroupAnchorPos()
+function HeadsUpAuras_GroupMoveTo(x, y)
+    local cx, cy = HeadsUpAuras_GroupAnchorPos()
     local ux, uy = UIParent:GetCenter()
     if not cx or not groupMoveList then return end
     local dx, dy = x - cx, y - cy
     if dx == 0 and dy == 0 then return end
-    if not groupSnap then   -- remember where they were, to put them back if the move is not kept (HeadsUp_GroupRestore)
+    if not groupSnap then   -- remember where they were, to put them back if the move is not kept (HeadsUpAuras_GroupRestore)
         groupSnap = {}
         for _, ind in ipairs(groupMoveList) do
             if ind.cfg and ind.cfg.pos then
@@ -3023,16 +3053,16 @@ function HeadsUp_GroupMoveTo(x, y)
     end
 end
 
--- The group id is shown on the screen (its auras are selected: HeadsUp_SetPreview), with its box and dots; dragging one of its
+-- The group id is shown on the screen (its auras are selected: HeadsUpAuras_SetPreview), with its box and dots; dragging one of its
 -- auras moves all of them. nil ends it.
-function HeadsUp_SetGroupMove(id)
-    HeadsUp_GroupRestore()   -- a typed move that was not kept goes back
+function HeadsUpAuras_SetGroupMove(id)
+    HeadsUpAuras_GroupRestore()   -- a typed move that was not kept goes back
     for _, ind in pairs(pool) do ind.groupMove = nil end
     groupMoveId, groupMoveList = nil, nil
     if groupBox then groupBox:Hide() end
     if not id then return end
     local list = {}
-    for _, i in ipairs(HeadsUp_GroupMembers(id)) do list[#list + 1] = GetPooled(i) end
+    for _, i in ipairs(HeadsUpAuras_GroupMembers(id)) do list[#list + 1] = GetPooled(i) end
     if #list == 0 then return end
     if #list >= 2 then
         for _, ind in ipairs(list) do ind.groupMove = list end   -- (a group of one aura moves like any aura)
@@ -3043,12 +3073,12 @@ function HeadsUp_SetGroupMove(id)
 end
 
 -- the typed move is kept (Place it, Save, or a drag with the mouse)
-function HeadsUp_GroupCommit()
+function HeadsUpAuras_GroupCommit()
     groupSnap = nil
 end
 
 -- the typed move is not kept: the auras go back to where they were
-function HeadsUp_GroupRestore()
+function HeadsUpAuras_GroupRestore()
     if not groupSnap then return end
     for ind, p in pairs(groupSnap) do
         if ind.cfg then
@@ -3060,20 +3090,20 @@ function HeadsUp_GroupRestore()
 end
 
 -- the group that is shown on the screen now (nil if none)
-function HeadsUp_GetMovingGroup()
+function HeadsUpAuras_GetMovingGroup()
     return groupMoveId
 end
 
-function HeadsUp_GroupMoving(id)
+function HeadsUpAuras_GroupMoving(id)
     return groupMoveId ~= nil and groupMoveId == id
 end
 
 -- Delete a saved aura. Returns true if it was the aura being edited.
-function HeadsUp_DeleteAura(index)
+function HeadsUpAuras_DeleteAura(index)
     if not auras[index] then return false end
     local wasEditing = (editIndex == index)
     if wasEditing then
-        HeadsUp_EndEdit()
+        HeadsUpAuras_EndEdit()
     elseif editIndex and editIndex > index then
         editIndex = editIndex - 1
     end
@@ -3089,7 +3119,7 @@ function HeadsUp_DeleteAura(index)
     end
     for _, a in ipairs(auras) do forget(a) end
     forget(draft)
-    HeadsUp_PruneGroups()
+    HeadsUpAuras_PruneGroups()
     local ind = table.remove(pool, index)
     if ind then
         ind.editing = false
@@ -3102,7 +3132,7 @@ function HeadsUp_DeleteAura(index)
     return wasEditing
 end
 
-function HeadsUp_EndEdit()
+function HeadsUpAuras_EndEdit()
     if not editInd then return end
     editInd.editing = false
     editInd.cfg = editIndex and auras[editIndex] or nil
@@ -3112,8 +3142,8 @@ function HeadsUp_EndEdit()
 end
 
 -- index = position in the saved list, or nil for a brand-new aura.
-function HeadsUp_BeginEdit(index)
-    HeadsUp_EndEdit()
+function HeadsUpAuras_BeginEdit(index)
+    HeadsUpAuras_EndEdit()
     editIndex = index
     if index then
         draft = CopyConfig(auras[index])
@@ -3133,7 +3163,7 @@ end
 
 -- Where the draft's icon is: the distance of its centre from the centre of the screen
 -- (X to the right, Y upwards). A new aura starts at 0, 150.
-function HeadsUp_GetPosition()
+function HeadsUpAuras_GetPosition()
     if not draft then return 0, 150 end
     local pos = draft.pos
     if not pos then return 0, 150 end
@@ -3148,18 +3178,18 @@ function HeadsUp_GetPosition()
 end
 
 -- Put the draft's icon at X, Y (see above). The window applies the draft afterwards.
-function HeadsUp_SetPosition(x, y)
+function HeadsUpAuras_SetPosition(x, y)
     if not draft then return end
     draft.pos = { "CENTER", "CENTER", x, y }
 end
 
 -- Re-apply the draft after the settings window changed it.
-function HeadsUp_ApplyDraft()
+function HeadsUpAuras_ApplyDraft()
     if editInd then ApplyConfig(editInd) end
 end
 
 -- Write the draft into the saved list. Returns the aura's index, or nil if no ability yet.
-function HeadsUp_Save()
+function HeadsUpAuras_Save()
     if not draft or not draft.spellID then return nil end
     draft.name = UniqueName(draft.name or SpellName(draft.spellID) or "Aura", editIndex)
     draft.uid = draft.uid or NewUid()
@@ -3189,8 +3219,8 @@ end
 
 local driver = CreateFrame("Frame")
 
--- The id (GUID) of the current target, or nil when there is none or it cannot be read. The test of 21 Oct 2026
--- (HeadsUpDB.targetProbe) found it readable in combat, so it tells one enemy from another.
+-- The id (GUID) of the current target, or nil when there is none or it cannot be read. It is readable
+-- in combat in the open world, so it tells one enemy from another.
 local function TargetGuid()
     if not UnitExists("target") then return nil end
     local ok, guid = pcall(UnitGUID, "target")
@@ -3198,121 +3228,13 @@ local function TargetGuid()
     return guid
 end
 
--- A silent test (HeadsUpDB.targetProbe, read from the log file): can the addon tell one enemy from another in
--- combat? On every target change and every cast of the player it writes what can be read about the target
--- (readable / secret): its id (GUID), name, level, type, and the nameplate frame it has. Nothing goes to the chat.
-local function RecordTargetProbe(event, spellID)
-    if not HeadsUpDB then return end
-    local probe = HeadsUpDB.targetProbe or {}
-    probe.samples = probe.samples or {}
-    probe.counts = probe.counts or {}
-    HeadsUpDB.targetProbe = probe
-    local where = inCombat and "combat" or "ooc"
-    local function kind(v)
-        if v == nil then return "nil" end
-        local ok, secret = pcall(issecretvalue, v)
-        return (ok and secret) and "secret" or "readable"
-    end
-    local entry = { t = date("%H:%M:%S"), event = event, combat = inCombat and true or false }
-    if spellID ~= nil and kind(spellID) == "readable" then entry.spell = spellID end
-    local exists = UnitExists("target")
-    entry.exists = exists and true or false
-    if exists then
-        local function look(name, fn)
-            local ok, v = pcall(fn, "target")
-            local k = not ok and "error" or kind(v)
-            entry[name] = k
-            local key = name .. "_" .. where .. "_" .. k
-            probe.counts[key] = (probe.counts[key] or 0) + 1
-            if ok and k == "readable" then return v end
-            return nil
-        end
-        local guid = look("guid", UnitGUID)
-        if guid then entry.guidTail = tostring(guid):sub(-12) end
-        local name = look("name", UnitName)
-        if name then entry.nameText = tostring(name) end
-        -- the distance to the target (yards, squared): a spell with travel time takes distance / speed to arrive
-        local dist = look("distSq", function(unit) return UnitDistanceSquared and UnitDistanceSquared(unit) end)
-        if dist then entry.yards = math.floor(math.sqrt(dist) + 0.5) end
-        look("level", UnitLevel)
-        look("classification", UnitClassification)
-        look("creatureType", UnitCreatureType)
-        local okP, plate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
-        entry.plate = (okP and plate) and tostring(plate):sub(-8) or (okP and "none" or "error")
-        if okP and plate and plate.GetUnit then
-            -- (the unit token of the nameplate: readable?)
-            local okU, token = pcall(function() return plate:GetUnit() end)
-            entry.plateToken = okU and kind(token) or "error"
-        end
-    end
-    table.insert(probe.samples, entry)
-    while #probe.samples > 100 do table.remove(probe.samples, 1) end
-end
-
--- A second silent test (HeadsUpDB.crowdProbe): how many enemies are around and how many of them have aggro on the
--- player? Every 3 seconds in combat it walks the nameplates and writes what can be read (readable / secret), with
--- the kind of place (none = open world, party, raid, scenario...). Nothing goes to the chat.
-local function RecordCrowdProbe()
-    if not HeadsUpDB or not (C_NamePlate and C_NamePlate.GetNamePlates) then return end
-    local probe = HeadsUpDB.crowdProbe or {}
-    probe.samples = probe.samples or {}
-    probe.counts = probe.counts or {}
-    HeadsUpDB.crowdProbe = probe
-    local _, place = IsInInstance()
-    place = place or "none"
-    local entry = { t = date("%H:%M:%S"), place = place, plates = 0, hostile = 0, fighting = 0, onMe = 0 }
-    local function kind(v)
-        if v == nil then return "nil" end
-        local ok, secret = pcall(issecretvalue, v)
-        return (ok and secret) and "secret" or "readable"
-    end
-    local function count(name, k)
-        local key = name .. "_" .. place .. "_" .. k
-        probe.counts[key] = (probe.counts[key] or 0) + 1
-    end
-    local okPlates, plates = pcall(C_NamePlate.GetNamePlates)
-    if not okPlates or type(plates) ~= "table" then
-        entry.error = "GetNamePlates"
-        count("plates", "error")
-    else
-        for _, plate in ipairs(plates) do
-            local okU, unit = pcall(function() return plate.namePlateUnitToken or plate:GetUnit() end)
-            local unitKind = okU and kind(unit) or "error"
-            count("unitToken", unitKind)
-            if okU and unitKind == "readable" then
-                entry.plates = entry.plates + 1
-                local function look(name, fn)
-                    local ok, v = pcall(fn, unit)
-                    local k = not ok and "error" or kind(v)
-                    count(name, k)
-                    if ok and k == "readable" then return v end
-                    return nil
-                end
-                if look("canAttack", function(u) return UnitCanAttack("player", u) end) then
-                    entry.hostile = entry.hostile + 1
-                    if look("inCombat", UnitAffectingCombat) then entry.fighting = entry.fighting + 1 end
-                    local threat = look("threat", function(u) return UnitThreatSituation("player", u) end)
-                    if threat and threat >= 2 then entry.onMe = entry.onMe + 1 end
-                end
-            end
-        end
-    end
-    table.insert(probe.samples, entry)
-    while #probe.samples > 60 do table.remove(probe.samples, 1) end
-end
-
 local function OnEvent(_, event, arg1, arg2, arg3)
-    if event == "PLAYER_TARGET_CHANGED" then
-        pcall(RecordTargetProbe, event)
-    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-        pcall(RecordTargetProbe, "cast", arg3)
-    end
     if event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" then
         -- Self-learning: remember which abilities light up (are "empowered"), for this class
         -- and specialization. The "Buff" condition offers exactly these.
-        if HeadsUpDB and currentSpec and type(arg1) == "number" and not issecretvalue(arg1) then
-            local learned = HeadsUpDB.learned or {}
-            HeadsUpDB.learned = learned
+        if HeadsUpAurasDB and currentSpec and type(arg1) == "number" and not issecretvalue(arg1) then
+            local learned = HeadsUpAurasDB.learned or {}
+            HeadsUpAurasDB.learned = learned
             local forClass = learned[playerClass] or {}
             learned[playerClass] = forClass
             local forSpec = forClass[currentSpec] or {}
@@ -3380,32 +3302,31 @@ local function OnEvent(_, event, arg1, arg2, arg3)
         return
     end
     if event == "ADDON_LOADED" then
-        if arg1 ~= "HeadsUp" then return end
+        if arg1 ~= "HeadsUpAuras" then return end
         playerClass = select(2, UnitClass("player"))
         inCombat = UnitAffectingCombat("player") and true or false
         RefreshCurrentSpec()
-        HeadsUpDB = HeadsUpDB or {}
-        HeadsUpDB.soundStats = nil   -- left over from the sound experiment (removed)
+        HeadsUpAurasDB = HeadsUpAurasDB or {}
         for _, e in ipairs(pendingErrors) do
-            HeadsUpDB.errors = HeadsUpDB.errors or {}
-            table.insert(HeadsUpDB.errors, e)
+            HeadsUpAurasDB.errors = HeadsUpAurasDB.errors or {}
+            table.insert(HeadsUpAurasDB.errors, e)
         end
         pendingErrors = {}
-        if not HeadsUpDB.auras then
-            HeadsUpDB.auras = {}
+        if not HeadsUpAurasDB.auras then
+            HeadsUpAurasDB.auras = {}
             -- migrate the old single-aura format
-            if HeadsUpDB.spellID then
+            if HeadsUpAurasDB.spellID then
                 local old = { class = playerClass }
                 for _, k in ipairs(KEYS) do
-                    if k ~= "class" then old[k] = HeadsUpDB[k] end
+                    if k ~= "class" then old[k] = HeadsUpAurasDB[k] end
                 end
-                HeadsUpDB.auras[1] = old
+                HeadsUpAurasDB.auras[1] = old
             end
         end
         for _, k in ipairs(KEYS) do
-            if k ~= "auras" then HeadsUpDB[k] = nil end
+            if k ~= "auras" then HeadsUpAurasDB[k] = nil end
         end
-        auras = HeadsUpDB.auras
+        auras = HeadsUpAurasDB.auras
         NormalizeNames()
         for i, a in ipairs(auras) do
             -- migrate the older single "Show it" dropdown (always / combat / out / never)
@@ -3466,7 +3387,7 @@ local function OnEvent(_, event, arg1, arg2, arg3)
                 a.buffSound, a.buffSoundKey, a.buffSoundVolume = nil, nil, nil
             end
             local known = false
-            for _, sound in ipairs(HeadsUpSounds) do
+            for _, sound in ipairs(HeadsUpAurasSounds) do
                 if sound.key == a.soundKey then known = true end
             end
             if not known then a.soundKey = "ding" end
@@ -3486,8 +3407,8 @@ local function OnEvent(_, event, arg1, arg2, arg3)
             ind.cfg = a
             ApplyConfig(ind)
         end
-        HeadsUp_PruneGroups()
-        HeadsUpDB.glowChoice = true   -- the migration above is done
+        HeadsUpAuras_PruneGroups()
+        HeadsUpAurasDB.glowChoice = true   -- the migration above is done
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
@@ -3539,65 +3460,9 @@ driver:SetScript("OnEvent", OnEvent)
 
 -- A cooldown running out fires no event, so auras with a cooldown condition are
 -- re-checked a few times a second.
--- A silent probe: once a second while in combat it asks the game for a few values and counts, in
--- HeadsUpDB.probe, whether each one is readable or hidden ("secret") in combat. It writes nothing
--- in the chat. It tells us what the addon may use for sounds and conditions.
-local sinceProbe = 0
-local function Probe()
-    if not HeadsUpDB then return end
-    local stats = HeadsUpDB.probe or {}
-    HeadsUpDB.probe = stats
-    local function check(name, fn, ...)
-        local ok, value = pcall(fn, ...)
-        local kind = (not ok and "error") or (value == nil and "nil") or (issecretvalue(value) and "secret") or "readable"
-        local key = "combat_" .. name .. "_" .. kind
-        stats[key] = (stats[key] or 0) + 1
-    end
-    check("UnitHealth_player", UnitHealth, "player")
-    check("UnitHealthMax_player", UnitHealthMax, "player")
-    check("UnitPower_player_main", function() return UnitPower("player") end)
-    check("UnitPowerMax_player_main", function() return UnitPowerMax("player") end)
-    if UnitExists("target") then
-        check("UnitHealth_target", UnitHealth, "target")
-    end
-    local spellID
-    for _, a in ipairs(auras) do
-        if a.class == playerClass and a.spellID then spellID = a.spellID break end
-    end
-    if spellID then
-        check("cooldown_duration", function()
-            local cd = C_Spell.GetSpellCooldown(spellID)
-            return cd and cd.duration
-        end)
-        check("cooldown_start", function()
-            local cd = C_Spell.GetSpellCooldown(spellID)
-            return cd and cd.startTime
-        end)
-        check("charges_current", function()
-            local ch = C_Spell.GetSpellCharges(spellID)
-            return ch and ch.currentCharges
-        end)
-        check("IsSpellUsable", function() return (C_Spell.IsSpellUsable(spellID)) end)
-        check("IsSpellOverlayed", function() return C_SpellActivationOverlay.IsSpellOverlayed(spellID) end)
-    end
-end
-
 local sinceCheck = 0
-local sinceCrowd = 0
 local sinceCrowdRead = 0
 driver:SetScript("OnUpdate", function(_, elapsed)
-    if inCombat then
-        sinceCrowd = (sinceCrowd or 0) + elapsed
-        if sinceCrowd >= 3 then
-            sinceCrowd = 0
-            pcall(RecordCrowdProbe)
-        end
-        sinceProbe = sinceProbe + elapsed
-        if sinceProbe >= 1 then
-            sinceProbe = 0
-            Probe()
-        end
-    end
     sinceCheck = sinceCheck + elapsed
     if sinceCheck < 0.1 then return end
     sinceCheck = 0
@@ -3624,55 +3489,30 @@ driver:SetScript("OnUpdate", function(_, elapsed)
     end)
 end)
 
--- /headsup : open settings
--- /headsup why : save to the log what every aura is doing right now, so a confusing moment
+-- /hua : open settings
+-- /hua why : save to the log what every aura is doing right now, so a confusing moment
 -- can be examined exactly. Works in combat. It never writes to the chat: the lines are
--- kept (the last 30 snapshots, newest last) in HeadsUpDB.why and read from the log file.
-function HeadsUp_Why()
-    if not HeadsUpDB then return end
-    local history = HeadsUpDB.why
+-- kept (the last 30 snapshots, newest last) in HeadsUpAurasDB.why and read from the log file.
+function HeadsUpAuras_Why()
+    if not HeadsUpAurasDB then return end
+    local history = HeadsUpAurasDB.why
     if type(history) ~= "table" or type(history[1]) ~= "table" then history = {} end
-    local lines = HeadsUp_DebugState()
+    local lines = HeadsUpAuras_DebugState()
     table.insert(lines, 1, "== snapshot " .. date("%H:%M:%S"))
     history[#history + 1] = lines
     while #history > 30 do table.remove(history, 1) end
-    HeadsUpDB.why = history
+    HeadsUpAurasDB.why = history
 end
--- /headsup soundtest : plays four sounds, two seconds apart, to find out which ones are heard:
---   1 a sound of the game, 2 a sound file of another addon (GTFO, if it is installed),
---   3 and 4 two of our own files. The answer of the game is written to HeadsUpDB.soundLog (nothing in the chat).
-function HeadsUp_SoundTest()
-    local tests = {
-        { "1 game sound 12889", function() return PlaySound(12889, "Master") end },
-        { "2 GTFO file", function() return PlaySoundFile("Interface\\AddOns\\GTFO\\Sounds\\alarmbeep.ogg", "Master") end },
-        { "3 our ding_3", function() return PlaySoundFile("Interface\\AddOns\\HeadsUp\\Sounds\\ding_3.ogg", "Master") end },
-        { "4 our chime_3", function() return PlaySoundFile("Interface\\AddOns\\HeadsUp\\Sounds\\chime_3.ogg", "Master") end },
-    }
-    for i, test in ipairs(tests) do
-        C_Timer.After((i - 1) * 2.5, function()
-            local ok, willPlay, handle = pcall(test[2])
-            LogSound("soundtest " .. test[1] .. " -> " .. tostring(ok) .. " willPlay=" .. tostring(willPlay)
-                .. " handle=" .. tostring(handle))
-        end)
-    end
-end
-
-SLASH_HEADSUP1 = "/headsup"
-SlashCmdList.HEADSUP = function(msg)
+SLASH_HEADSUPAURAS1 = "/headsupauras"
+SLASH_HEADSUPAURAS2 = "/hua"
+SlashCmdList.HEADSUPAURAS = function(msg)
     if msg == "why" then
-        HeadsUp_Why()
-    elseif msg == "soundtest" then
-        HeadsUp_SoundTest()
-    elseif msg == "survey off" or msg == "survey on" then
-        -- the recorders (Survey.lua, Survey2.lua) start at the next /reload only when this is "on"
-        HeadsUpDB.surveyOff = (msg == "survey off") or nil
-    elseif msg == "scan" then
-        if HeadsUp_ScanCatalog then HeadsUp_ScanCatalog(true) end
+        HeadsUpAuras_Why()
     elseif msg == "minimap" then
-        if HeadsUp_ToggleMinimapButton then HeadsUp_ToggleMinimapButton() end
+        if HeadsUpAuras_ToggleMinimapButton then HeadsUpAuras_ToggleMinimapButton() end
     else
-        HeadsUp_ToggleSettings()
+        HeadsUpAuras_ToggleSettings()
     end
 end
 
-print("|cffff8800HeadsUp|r loaded")
+print("|cffff8800HeadsUp Auras|r loaded")

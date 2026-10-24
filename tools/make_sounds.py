@@ -1,5 +1,5 @@
 """
-Builds the sounds of HeadsUp (HeadsUp/Sounds/*.ogg): six short bell-like sounds, each one in three
+Builds the sounds of HeadsUp (HeadsUpAuras/Sounds/*.ogg): six short bell-like sounds, each one in three
 levels (1 = soft, 2 = normal, 3 = loud). They are made here from nothing (a sum of decaying tones),
 so they are our own: no copyright and full control of the loudness.
 
@@ -13,7 +13,7 @@ import numpy as np
 import soundfile as sf
 
 RATE = 44100
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "HeadsUp", "Sounds")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "HeadsUpAuras", "Sounds")
 LEVELS = {1: 0.25, 2: 0.50, 3: 0.90}   # peak of each level (soft, normal, loud)
 
 

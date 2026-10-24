@@ -7,3 +7,6 @@ tools/cache/
 dist/
 *.zip
 *.bak
+
+# test recorders used while developing (never in the repository)
+tools/survey/

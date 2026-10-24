@@ -1,5 +1,5 @@
 """
-Builds HeadsUp/KnownDurations.lua: how long the effect of an ability lasts, and where it sits (on the enemy:
+Builds HeadsUpAuras/KnownDurations.lua: how long the effect of an ability lasts, and where it sits (on the enemy:
 a debuff, a damage over time...; or on the player: a shield, a defensive, a damage boost), per class. It is the
 game's own data, from the public wago.tools tables:
 
@@ -25,7 +25,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "cache")
-OUT = os.path.join(HERE, "..", "HeadsUp", "KnownDurations.lua")
+OUT = os.path.join(HERE, "..", "HeadsUpAuras", "KnownDurations.lua")
 BASE = "https://wago.tools/db2/%s/csv"
 
 CLASS = {
@@ -139,12 +139,12 @@ def main():
             result.setdefault(token, {})[name] = (value, "enemy")
 
     lines = [
-        "-- HeadsUp: how long the effect of an ability lasts on an enemy (a debuff, a damage over time...),",
+        "-- HeadsUp Auras: how long the effect of an ability lasts on an enemy (a debuff, a damage over time...),",
         "-- per class, in seconds. MADE BY tools/make_durations.py FROM THE GAME'S OWN DATA: do not edit by hand.",
-        "-- Made on %s. Format: HeadsUpDurations[CLASS][\"Ability name\"] = { seconds, \"enemy\" or \"self\" }" % datetime.date.today(),
+        "-- Made on %s. Format: HeadsUpAurasDurations[CLASS][\"Ability name\"] = { seconds, \"enemy\" or \"self\" }" % datetime.date.today(),
         "-- A suggestion: a talent can change a duration.",
         "",
-        "HeadsUpDurations = {",
+        "HeadsUpAurasDurations = {",
     ]
     total = 0
     for token in sorted(result):
@@ -157,8 +157,8 @@ def main():
         lines.append("    },")
     lines.append("}")
     lines.append("")
-    lines.append("-- Other abilities that put the same effect on the enemy: HeadsUpAlsoStartedBy[CLASS][\"Ability\"] = { \"Other ability\", ... }")
-    lines.append("HeadsUpAlsoStartedBy = {")
+    lines.append("-- Other abilities that put the same effect on the enemy: HeadsUpAurasAlsoStartedBy[CLASS][\"Ability\"] = { \"Other ability\", ... }")
+    lines.append("HeadsUpAurasAlsoStartedBy = {")
     for token in sorted(ALSO_STARTED_BY):
         lines.append("    %s = {" % token)
         for name in sorted(ALSO_STARTED_BY[token]):

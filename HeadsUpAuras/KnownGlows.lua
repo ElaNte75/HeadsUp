@@ -1,8 +1,8 @@
--- HeadsUp: abilities that can light up (proc glow), per class, and the buffs that make them
+-- HeadsUp Auras: abilities that can light up (proc glow), per class, and the buffs that make them
 -- light up. MADE BY tools/make_glows.py FROM THE GAME'S OWN DATA: do not edit by hand.
--- Made on 2026-10-19. Format: HeadsUpGlows[CLASS][ability id] = { buff id, buff id, ... }
+-- Made on 2026-10-19. Format: HeadsUpAurasGlows[CLASS][ability id] = { buff id, buff id, ... }
 
-HeadsUpGlows = {
+HeadsUpAurasGlows = {
     DEATHKNIGHT = {
         [43265] = { 81141, 331117, 1269355 },
         [47541] = { 1244516 },

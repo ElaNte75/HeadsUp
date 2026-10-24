@@ -1,16 +1,16 @@
--- HeadsUp: a button on the minimap that opens and closes the window, and the same action from the
+-- HeadsUp Auras: a button on the minimap that opens and closes the window, and the same action from the
 -- add-on menu of the minimap (the list of add-ons under the minimap button).
 --   click: open / close the window       drag: move the button around the minimap
---   /headsup minimap: hide or show the button
+--   /hua minimap: hide or show the button
 
-local ICON = "Interface\\AddOns\\HeadsUp\\Media\\icon.tga"
+local ICON = "Interface\\AddOns\\HeadsUpAuras\\Media\\icon.tga"
 local DEFAULT_ANGLE = 200   -- degrees: lower left of the minimap
 
 local button
 
 local function Settings()
-    HeadsUpDB = HeadsUpDB or {}
-    return HeadsUpDB
+    HeadsUpAurasDB = HeadsUpAurasDB or {}
+    return HeadsUpAurasDB
 end
 
 local function Angle()
@@ -34,18 +34,18 @@ end
 
 local function ShowTooltip(owner)
     GameTooltip:SetOwner(owner, "ANCHOR_LEFT")
-    GameTooltip:AddLine("HeadsUp", 1, 0.56, 0.12)
+    GameTooltip:AddLine("HeadsUp Auras", 1, 0.56, 0.12)
     GameTooltip:AddLine("Click: open or close the window.", 1, 1, 1, true)
     if owner == button then
         GameTooltip:AddLine("Drag: move this button around the minimap.", 0.7, 0.7, 0.7, true)
-        GameTooltip:AddLine("/headsup minimap: hide or show this button.", 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine("/hua minimap: hide or show this button.", 0.7, 0.7, 0.7, true)
     end
     GameTooltip:Show()
 end
 
 local function Create()
     if button then return end
-    button = CreateFrame("Button", "HeadsUpMinimapButton", Minimap)
+    button = CreateFrame("Button", "HeadsUpAurasMinimapButton", Minimap)
     button:SetSize(32, 32)
     button:SetFrameStrata("MEDIUM")
     button:SetFrameLevel(8)
@@ -69,7 +69,7 @@ local function Create()
 
     button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
-    button:SetScript("OnClick", function() HeadsUp_ToggleSettings() end)
+    button:SetScript("OnClick", function() HeadsUpAuras_ToggleSettings() end)
     button:SetScript("OnEnter", ShowTooltip)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
@@ -97,20 +97,20 @@ local function Refresh()
     button:Show()
 end
 
--- /headsup minimap
-function HeadsUp_ToggleMinimapButton()
+-- /hua minimap
+function HeadsUpAuras_ToggleMinimapButton()
     Settings().minimapHidden = not Settings().minimapHidden or nil
     Refresh()
 end
 
--- the add-on menu of the minimap (the entries come from the lines AddonCompartment... of HeadsUp.toc)
-function HeadsUp_OnCompartmentClick()
-    HeadsUp_ToggleSettings()
+-- the add-on menu of the minimap (the entries come from the lines AddonCompartment... of HeadsUpAuras.toc)
+function HeadsUpAuras_OnCompartmentClick()
+    HeadsUpAuras_ToggleSettings()
 end
-function HeadsUp_OnCompartmentEnter(_, menuButton)
+function HeadsUpAuras_OnCompartmentEnter(_, menuButton)
     ShowTooltip(menuButton)
 end
-function HeadsUp_OnCompartmentLeave()
+function HeadsUpAuras_OnCompartmentLeave()
     GameTooltip:Hide()
 end
 
