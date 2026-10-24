@@ -1,3 +1,7 @@
+> **Important: HeadsUp is now called HeadsUp Auras.** The old name was too close to another add-on (*Heads Up*, which speaks tank busters) and the two cannot be installed together. Nothing else changed: this is the same add-on, with the same auras, groups and counters.
+>
+> **If you already have the old version:** close the game, delete the old `HeadsUp` folder from `Interface/AddOns`, put the new `HeadsUpAuras` folder there, and run `Migrate-HeadsUp-settings.ps1` once (you find it in the `release` folder of the [GitHub page](https://github.com/ElaNte75/HeadsUpAuras)): it brings your auras with you. The command is now `/hua`.
+
 # HeadsUp Auras
 
 ### Never miss the moment to press the right button.
