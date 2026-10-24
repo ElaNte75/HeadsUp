@@ -38,7 +38,7 @@ UI.C = C
 -- sizes (pixels)
 local L = {
     COLS = 6,
-    COL_W = 64,       -- one column; the window and every control follow from it
+    COL_W = 67,       -- one column; the window and every control follow from it
     GAP = 8,
     CTRL_H = 22,      -- every control (dropdown, box, button, checkbox row) is this high
     ROW_H = 28,       -- one row of a card
@@ -47,6 +47,9 @@ local L = {
     CARD_GAP = 12,    -- between two cards
 }
 L.INNER_W = L.COLS * L.COL_W + (L.COLS - 1) * L.GAP
+-- the gap between two boxes on one row (width and height, X and Y, two dropdowns...) is the same everywhere:
+-- wide enough for the "=" button of the size
+L.PAIR_GAP = L.CTRL_H + 4
 L.PAGE_W = L.INNER_W + 2 * L.PAD
 UI.L = L
 
@@ -360,8 +363,16 @@ local function buildPopup()
         r:SetScript("OnMouseWheel", popupWheel)
         r:SetScript("OnEnter", function(self)
             if self.item and not self.item.disabled then self.hl:Show() end
+            if self.item and self.item.tip then   -- (an item can explain itself: item.tip = function(tooltip))
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                self.item.tip(GameTooltip)
+                GameTooltip:Show()
+            end
         end)
-        r:SetScript("OnLeave", function(self) self.hl:Hide() end)
+        r:SetScript("OnLeave", function(self)
+            self.hl:Hide()
+            GameTooltip:Hide()
+        end)
         r:SetScript("OnClick", function(self) UI.PopupClick(self) end)
         popup.rows[i] = r
     end
@@ -455,6 +466,94 @@ function UI.Dropdown(parent, width, openFn)
 end
 
 ------------------------------------------------------------
+-- the colour palette: a small window of swatches (rows of lighter and darker colours, and a row of greys)
+------------------------------------------------------------
+local PALETTE_COLS, PALETTE_SWATCH, PALETTE_GAP = 12, 18, 2
+local palette, paletteBlocker
+
+local function HsvToRgb(h, s, v)
+    local c = v * s
+    local x = c * (1 - math.abs((h / 60) % 2 - 1))
+    local m = v - c
+    local r, g, b
+    if h < 60 then r, g, b = c, x, 0
+    elseif h < 120 then r, g, b = x, c, 0
+    elseif h < 180 then r, g, b = 0, c, x
+    elseif h < 240 then r, g, b = 0, x, c
+    elseif h < 300 then r, g, b = x, 0, c
+    else r, g, b = c, 0, x end
+    return r + m, g + m, b + m
+end
+
+local function PaletteColors()
+    local list = {}
+    for i = 0, PALETTE_COLS - 1 do   -- greys, white to black
+        local g = 1 - i / (PALETTE_COLS - 1)
+        list[#list + 1] = { g, g, g }
+    end
+    for _, row in ipairs({ { 0.35, 1 }, { 0.65, 1 }, { 1, 1 }, { 1, 0.7 }, { 1, 0.45 } }) do
+        for i = 0, PALETTE_COLS - 1 do
+            local r, g, b = HsvToRgb(i * 30, row[1], row[2])
+            list[#list + 1] = { r, g, b }
+        end
+    end
+    return list
+end
+
+function UI.ClosePalette()
+    if palette then palette:Hide() end
+    if paletteBlocker then paletteBlocker:Hide() end
+end
+
+-- opens the palette under anchor; onPick(r, g, b) is called when a colour is clicked
+function UI.OpenPalette(anchor, current, onPick)
+    if not palette then
+        paletteBlocker = CreateFrame("Button", nil, UIParent)
+        paletteBlocker:SetAllPoints(UIParent)
+        paletteBlocker:SetFrameStrata("FULLSCREEN_DIALOG")
+        paletteBlocker:SetFrameLevel(20)
+        paletteBlocker:RegisterForClicks("AnyUp")
+        paletteBlocker:Hide()
+        paletteBlocker:SetScript("OnClick", UI.ClosePalette)
+        local pad = 8
+        local width = pad * 2 + PALETTE_COLS * PALETTE_SWATCH + (PALETTE_COLS - 1) * PALETTE_GAP
+        local colors = PaletteColors()
+        local rowsCount = math.ceil(#colors / PALETTE_COLS)
+        palette = UI.Box(UIParent, C.popup, C.borderHi)
+        _G.HeadsUpPalette = palette
+        palette:SetFrameStrata("FULLSCREEN_DIALOG")
+        palette:SetFrameLevel(30)
+        palette:SetClampedToScreen(true)
+        palette:EnableMouse(true)
+        palette:SetSize(width, pad * 2 + rowsCount * PALETTE_SWATCH + (rowsCount - 1) * PALETTE_GAP)
+        palette:SetScript("OnHide", function() paletteBlocker:Hide() end)
+        palette:Hide()
+        palette.swatches = {}
+        for i, color in ipairs(colors) do
+            local col, row = (i - 1) % PALETTE_COLS, math.floor((i - 1) / PALETTE_COLS)
+            local b = UI.Box(palette, { color[1], color[2], color[3], 1 }, C.border, "Button")
+            b:SetSize(PALETTE_SWATCH, PALETTE_SWATCH)
+            b:SetPoint("TOPLEFT", palette, "TOPLEFT", pad + col * (PALETTE_SWATCH + PALETTE_GAP), -(pad + row * (PALETTE_SWATCH + PALETTE_GAP)))
+            b.rgb = color
+            b:SetScript("OnEnter", function(self) self:SetBackdropBorderColor(rgba(C.accent)) end)
+            b:SetScript("OnLeave", function(self) self:SetBackdropBorderColor(rgba(C.border)) end)
+            b:SetScript("OnClick", function(self)
+                UI.ClosePalette()
+                if palette.onPick then palette.onPick(self.rgb[1], self.rgb[2], self.rgb[3]) end
+            end)
+            palette.swatches[i] = b
+        end
+        tinsert(UISpecialFrames, "HeadsUpPalette")
+    end
+    palette.onPick = onPick
+    palette:ClearAllPoints()
+    palette:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    paletteBlocker:Show()
+    palette:Show()
+    palette:Raise()
+end
+
+------------------------------------------------------------
 -- pages, cards, rows
 ------------------------------------------------------------
 local registry = {}
@@ -476,7 +575,7 @@ local function Bind(def)
     return get, set
 end
 
--- Builds one control of a row. def.type: dropdown | input | button | icon
+-- Builds one control of a row. def.type: dropdown | input | button | link | slot | color | icon
 local function MakeControl(card, def, x, y, w)
     local c = {}
     local f
@@ -539,6 +638,26 @@ local function MakeControl(card, def, x, y, w)
             if d and not f.edit:HasFocus() then f.edit:SetText(current(d)) end
             f:SetOn(on)
         end
+        -- an item can be dropped on the box (dragged from the bags): def.onItemDrop(d, itemID)
+        if def.onItemDrop then
+            local function take()
+                local kind, id = GetCursorInfo()
+                if kind ~= "item" and kind ~= "currency" then return end
+                local d = HeadsUp_GetDraft()
+                if not d then return end
+                ClearCursor()
+                def.onItemDrop(d, id, kind)
+                UI.Changed()
+            end
+            -- a link shift-clicked (an item in the bags, a currency in the currency window) while the box is selected
+            UI.linkBoxes = UI.linkBoxes or {}
+            UI.linkBoxes[#UI.linkBoxes + 1] = f.edit
+            f.edit:SetScript("OnReceiveDrag", take)
+            f.edit:HookScript("OnMouseUp", take)
+            f:EnableMouse(true)
+            f:SetScript("OnReceiveDrag", take)
+            f:SetScript("OnMouseUp", take)
+        end
     elseif kind == "button" then
         f = UI.Button(card, def.text, w)
         f:SetScript("OnClick", function()
@@ -561,6 +680,96 @@ local function MakeControl(card, def, x, y, w)
             f.label:SetText(active and (def.textOn or "=") or (def.textOff or "x"))
             f:SetOn(on)
         end
+    elseif kind == "slot" then
+        -- a box that holds one aura: drop an aura from the list on it (UI.dragUid is set while one is dragged), click it
+        -- to pick from a list, right-click to empty it.
+        -- def.info(d) -> name, icon, problem (text or nil); nil name = empty; def.items(d); def.onClear(d); def.onDrop(d, uid)
+        f = UI.Box(card, C.field, C.border, "Button")
+        f:SetSize(w, L.CTRL_H)
+        f.icon = f:CreateTexture(nil, "ARTWORK")
+        f.icon:SetSize(16, 16)
+        f.icon:SetPoint("LEFT", 4, 0)
+        f.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        f.text = UI.Text(f, 12, C.text)
+        f.text:SetPoint("LEFT", f.icon, "RIGHT", 6, 0)
+        f.text:SetPoint("RIGHT", -6, 0)
+        f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        Interactive(f, function(self)
+            local on = self:IsEnabled()
+            local hot = on and self.dropHot
+            local hov = on and (self.hover or UI.PopupOwner() == self)
+            self:SetBackdropColor(rgba((hot or hov) and C.fieldHover or C.field))
+            self:SetBackdropBorderColor(rgba(hot and C.accent or (hov and C.borderHi or C.border)))
+        end)
+        f:SetScript("OnClick", function(self, button)
+            local d = HeadsUp_GetDraft()
+            if not d then return end
+            if button == "RightButton" then
+                def.onClear(d)
+                UI.Changed()
+            elseif UI.PopupOwner() == self then
+                UI.ClosePopup()
+            else
+                UI.OpenPopup(self, def.items(d), math.max(w, 200))
+            end
+        end)
+        -- while an aura is dragged over the box it lights up
+        f:SetScript("OnUpdate", function(self)
+            local hot = UI.dragUid ~= nil and self:IsMouseOver() and true or false
+            if hot ~= self.dropHot then
+                self.dropHot = hot
+                self:Paint()
+            end
+        end)
+        function c.Sync(d, on)
+            local name, icon, problem = nil, nil, nil
+            if d then name, icon, problem = def.info(d) end
+            if name then
+                f.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                f.icon:Show()
+                f.text:SetText(name)
+                f.text:SetTextColor(rgba(on and (problem and C.warn or C.text) or C.disabled))
+            else
+                f.icon:Hide()
+                f.text:SetText("Drop an aura here")
+                f.text:SetTextColor(rgba(C.disabled))
+            end
+            f:SetOn(on)
+        end
+        UI.drops = UI.drops or {}
+        UI.drops[#UI.drops + 1] = { frame = f, drop = function(uid)
+            local d = HeadsUp_GetDraft()
+            if d and f:IsEnabled() then
+                def.onDrop(d, uid)
+                UI.Changed()
+            end
+        end }
+    elseif kind == "color" then
+        -- a swatch of the colour; clicking it opens the palette. def.get(d) -> { r, g, b }; def.set(d, { r, g, b })
+        f = UI.Box(card, C.field, C.border, "Button")
+        f:SetSize(w, L.CTRL_H)
+        f.swatch = f:CreateTexture(nil, "ARTWORK")
+        f.swatch:SetPoint("TOPLEFT", 3, -3)
+        f.swatch:SetPoint("BOTTOMRIGHT", -3, 3)
+        Interactive(f, function(self)
+            local on = self:IsEnabled()
+            self:SetBackdropBorderColor(rgba(on and (self.hover and C.borderHi or C.border) or C.border))
+            self.swatch:SetDesaturated(not on)
+        end)
+        f:SetScript("OnClick", function(self)
+            local d = HeadsUp_GetDraft()
+            if not d then return end
+            UI.ClosePopup()
+            UI.OpenPalette(self, def.get(d), function(r, g, b)
+                def.set(d, { r, g, b })
+                UI.Changed()
+            end)
+        end)
+        function c.Sync(d, on)
+            local color = d and def.get(d) or { 1, 1, 1 }
+            f.swatch:SetColorTexture(color[1], color[2], color[3], 1)
+            f:SetOn(on)
+        end
     elseif kind == "icon" then
         f = UI.IconButton(card, w, def.text)
         f:SetScript("OnClick", function()
@@ -570,6 +779,7 @@ local function MakeControl(card, def, x, y, w)
         function c.Sync(d, on)
             f.icon:SetTexture(d and def.icon(d) or "Interface\\Icons\\INV_Misc_QuestionMark")
             f.icon:SetDesaturated(not on)
+            if def.label and d then f.label:SetText(def.label(d) or "") end   -- (a text that changes: def.label(d))
             f:SetOn(on)
         end
     else
@@ -623,6 +833,21 @@ local function BuildControls(card, defs, y)
         end
         return list, math.max(1, math.floor((L.INNER_W - total) / (L.COL_W + L.GAP))), 0
     end
+    -- exactly two controls of two columns: both as wide as a dropdown, the second against the right edge, and the gap
+    -- between them exactly L.PAIR_GAP (the same on every row). The label gets the room that is left.
+    if defs and #defs == 2 and (defs[1].span or 2) == 2 and (defs[2].span or 2) == 2
+        and (defs[1].extra or 0) == 0 and (defs[2].extra or 0) == 0
+        and defs[1].type ~= "link" and defs[2].type ~= "link" then
+        local boxW = UI.DropdownWidth()
+        local x2 = L.PAD + L.INNER_W - boxW
+        local x1 = x2 - L.PAIR_GAP - boxW
+        local list = {
+            MakeControl(card, defs[1], x1, card.rowY, boxW),
+            MakeControl(card, defs[2], x2, card.rowY, boxW),
+        }
+        -- (the label is spanW(1) - GAP + slack wide, so that it ends one GAP before the first box)
+        return list, 1, (x1 - L.PAD) - spanW(1)
+    end
     local total = 0
     for _, cd in ipairs(defs or {}) do total = total + (cd.span or 2) end
     local col = L.COLS - total + 1
@@ -631,7 +856,8 @@ local function BuildControls(card, defs, y)
     for index, cd in ipairs(defs or {}) do
         local span = cd.span or 2
         local extra = cd.extra or 0   -- pixels added on the left (to line up with a wider field above)
-        local shrink = (cd.type == "dropdown" and span == 2) and (spanW(2) - UI.DropdownWidth()) or 0
+        -- every control of two columns (dropdown, number box, button) is as wide as a dropdown: same edges on every row
+        local shrink = (span == 2 and cd.type ~= "link") and (spanW(2) - UI.DropdownWidth()) or 0
         if index == 1 then slack = shrink end
         list[#list + 1] = MakeControl(card, cd, colX(col) - extra + shrink, card.rowY, spanW(span) + extra - shrink)
         col = col + span
@@ -648,9 +874,10 @@ function CardMethods:Field(def)
     label:SetPoint("LEFT", self, "TOPLEFT", L.PAD, -(self.rowY + L.CTRL_H / 2))
     label:SetWidth(spanW(labelSpan) - L.GAP + slack)
     if type(def.label) ~= "function" then label:SetText(def.label or "") end
+    local hit
     if def.tip then
         -- the label itself gets the tooltip through a transparent hit area
-        local hit = CreateFrame("Frame", nil, self)
+        hit = CreateFrame("Frame", nil, self)
         hit:EnableMouse(true)
         hit:SetPoint("TOPLEFT", self, "TOPLEFT", L.PAD, -self.rowY)
         hit:SetSize(spanW(labelSpan) + slack, L.CTRL_H)
@@ -662,6 +889,19 @@ function CardMethods:Field(def)
         label:SetTextColor(rgba(usable and C.text or C.disabled))
         for _, c in ipairs(ctrls) do c.Sync(d, usable) end
     end }
+    -- the row: it can be hidden and shown (SetShown), its top is rowY
+    local row = { y = self.rowY, label = label, controls = ctrls, hit = hit }
+    function row:SetShown(on)
+        self.label:SetShown(on)
+        if self.hit then self.hit:SetShown(on) end
+        for _, c in ipairs(self.controls) do c.frame:SetShown(on) end
+    end
+    return row
+end
+
+-- run fn(d) every time the widgets are synced with the draft (d = nil when no aura is open)
+function UI.Register(fn)
+    registry[#registry + 1] = { Sync = fn }
 end
 
 -- checkbox + label (+ controls that work only while it is ticked).
@@ -825,8 +1065,8 @@ function UI.NewPage(parent)
         end,
         wheel = function(delta) scroll:SetVerticalScroll(clamp(scroll:GetVerticalScroll() - delta * 40, 0, range())) end,
     })
-    bar:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 16, 0)      -- the same place on every page
-    bar:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 16, 0)
+    bar:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 11, 0)      -- the same place on every page
+    bar:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 11, 0)
     scroll:SetScript("OnVerticalScroll", function() bar:Refresh() end)
     scroll:SetScript("OnScrollRangeChanged", function() bar:Refresh() end)
     scroll:HookScript("OnShow", function()
@@ -866,4 +1106,21 @@ function UI.NewPage(parent)
     end
 
     return page
+end
+
+-- shift-clicking an item or a currency puts its link into the box that is selected (the ones that accept an item)
+local function TakeLink(link)
+    if not link then return end
+    for _, edit in ipairs(UI.linkBoxes or {}) do
+        if edit:HasFocus() then
+            edit:SetText(link)
+            edit:ClearFocus()   -- (leaving the box takes what is in it)
+            return
+        end
+    end
+end
+if hooksecurefunc then
+    -- (the game has moved this function: both places are hooked, whichever exists)
+    if ChatEdit_InsertLink then hooksecurefunc("ChatEdit_InsertLink", TakeLink) end
+    if ChatFrameUtil and ChatFrameUtil.InsertLink then hooksecurefunc(ChatFrameUtil, "InsertLink", TakeLink) end
 end

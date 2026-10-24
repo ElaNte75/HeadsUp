@@ -41,7 +41,7 @@ local EFFECT_STRATA = { "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN" }
 -- How small the icon gets during "Pulse" (1 = not at all).
 local PULSE_SHRINK = 0.92
 
-local KEYS = { "class", "specs", "name", "hidden", "spellID", "healthEnabled", "healthOp", "healthPct", "enemyEnabled", "enemyOp", "enemyPct", "cdEnabled", "cdState", "chargesEnabled", "chargesState", "enemyAliveEnabled", "enemyAlive", "buffEnabled", "buffID", "buffState", "suppressEnabled", "suppressSeconds", "effect", "icon", "showWhenEnabled", "showRules", "lingerEnabled", "lingerSeconds", "layer", "availEnabled", "pos", "width", "height", "sizeLinked", "powerEnabled", "powerOp", "powerValue", "secEnabled", "secOp", "secValue", "buffAlways", "empowerFx", "soundEnabled", "soundKey", "soundVolume", "formEnabled", "formSpell", "tgtHostileEnabled", "tgtHostile", "tgtTypeEnabled", "tgtType", "tgtClassEnabled", "tgtClass", "threatEnabled", "threatState", "shape", "empowerLight" }
+local KEYS = { "class", "specs", "name", "hidden", "spellID", "healthEnabled", "healthOp", "healthPct", "enemyEnabled", "enemyOp", "enemyPct", "cdEnabled", "cdState", "chargesEnabled", "chargesState", "enemyAliveEnabled", "enemyAlive", "buffEnabled", "buffID", "buffState", "suppressEnabled", "suppressSeconds", "suppressReset", "uid", "trackerOf", "trackerCue", "kind", "trackShow", "barDrain", "barIcon", "barColor", "barTime", "barTimeOn", "barIconOn", "otherAuras", "crowdEnabled", "crowdOp", "crowdN", "crowdMetric", "group", "effect", "icon", "showWhenEnabled", "showRules", "lingerEnabled", "lingerSeconds", "layer", "availEnabled", "pos", "width", "height", "sizeLinked", "powerEnabled", "powerOp", "powerValue", "secEnabled", "secOp", "secValue", "buffAlways", "empowerFx", "soundEnabled", "soundKey", "soundVolume", "formEnabled", "formSpell", "tgtHostileEnabled", "tgtHostile", "tgtTypeEnabled", "tgtType", "tgtClassEnabled", "tgtClass", "threatEnabled", "threatState", "shape", "empowerLight", "itemID", "ctIcon", "ctName", "ctNum", "ctColor", "ctSize", "ctBg", "ctBgAlpha", "ctWho", "ctChar", "ctType", "currencyID", "ctBank" }
 
 local auras = {}        -- saved list (HeadsUpDB.auras)
 local pool = {}         -- pool[i] = indicator for auras[i]
@@ -139,8 +139,12 @@ local function NewConfig()
         enemyAlive = "yes",        -- ... "yes" = alive, "no" = dead
         formEnabled = false,       -- your form (druid forms...) is this one ...
         formSpell = 0,             -- ... the spell id of the form (0 = no form)
-        tgtHostileEnabled = false, -- the target is an enemy / friendly ...
-        tgtHostile = "enemy",      -- ... "enemy" or "friend"
+        tgtHostileEnabled = false, -- the hostility of the target ...
+        tgtHostile = "enemy",      -- ... "enemy", "friend" or "neutral"
+        crowdEnabled = false,      -- how many enemies are around (counted from the nameplates): the number compared ...
+        crowdOp = ">=",            -- ... with this operator ...
+        crowdN = 2,                -- ... and this number (typed by the player) ...
+        crowdMetric = "combat",    -- ... counting the enemies "combat" (in combat) or "me" (attacking the player)
         tgtTypeEnabled = false,    -- the target is a player / an NPC ...
         tgtType = "npc",           -- ... "npc" or "player"
         tgtClassEnabled = false,   -- the target is a boss / rare / elite / normal mob (any ticked one) ...
@@ -170,6 +174,32 @@ local function NewConfig()
         icon = nil,              -- a picture chosen by the player; nil = the ability's own icon
         suppressEnabled = false, -- after the player casts the ability, hide it for a while ...
         suppressSeconds = 10,    -- ... this many seconds (the length of its effect)
+        suppressReset = false,   -- ... and start over (show it again) when the player changes target
+        trackerCue = true,       -- a debuff tracker: its aura shows again when the tracker's timer ends
+        kind = "ability",        -- what the aura is: "ability" (press it now), "buff" or "debuff" (follow an effect with our own timer)
+        trackShow = "hide",      -- with the timer: "hide" = hidden while it runs, "while" = shown only while it runs
+        barDrain = "left",       -- a bar empties toward this side ("left" or "right")
+        barIcon = "left",        -- a bar's small icon: "left", "right" or "none"
+        barColor = { 1, 0.56, 0.12 },   -- the colour of the bar
+        barTime = "right",       -- where the seconds left are written on the bar: "left", "center" or "right"
+        barTimeOn = true,        -- ... and whether they are written at all
+        barIconOn = true,        -- whether the bar has its small icon (at the side barIcon)
+        -- a Counter (kind "counter", shape "text"): how many of an item are in the bags, written as text without any frame.
+        -- spellID is 0 once an item is chosen (so the rest of the addon treats it as an aura with a subject).
+        ctType = "item",         -- what is counted: an "item" (in the bags, optionally in the bank too) or a "currency" ...
+        itemID = nil,            -- ... the item that is counted ...
+        currencyID = nil,        -- ... or the currency (crests, coins, keys...: they are not in the bags) ...
+        ctBank = false,          -- ... and, for an item, whether the bank and the reagent bank count too
+        ctIcon = "left",         -- where the item's picture is written: "off", "left", "center" or "right" ...
+        ctName = "left",         -- ... the item's name ...
+        ctNum = "right",         -- ... and the number (the pieces that are written in the same place go side by side)
+        ctColor = { 1, 1, 1 },   -- the colour of the letters
+        ctSize = 12,             -- the size of the letters, in pixels (typed by the player)
+        ctBg = { 0, 0, 0 },      -- the colour of the box behind the text of a counter (text or bar): black ...
+        ctWho = "spec",          -- who sees a counter: "all" (every character), "char" (only the one that made it), "spec" (its class
+                                 -- and specializations, as an ability) or "prof" (the characters with the profession of the item)
+        ctChar = nil,            -- the character that made it ("Name-Realm"), for "char"
+        ctBgAlpha = 20,          -- ... and how solid it is, in percent (0 = no box at all, 100 = solid): 20
         layer = 3,        -- display priority 1..5 (3 = normal); higher is drawn on top
         pos = nil,        -- { point, relPoint, x, y }
         width = 50,       -- the icon is width x height pixels ...
@@ -186,6 +216,15 @@ local function CopyConfig(src)
         elseif (k == "showRules" or k == "tgtClass") and src[k] then
             copy[k] = {}
             for rule, on in pairs(src[k]) do copy[k][rule] = on end
+        elseif k == "otherAuras" and src.otherAuras then
+            copy.otherAuras = {}
+            for i, row in ipairs(src.otherAuras) do copy.otherAuras[i] = { uid = row.uid, state = row.state } end
+        elseif k == "barColor" and src.barColor then
+            copy.barColor = { src.barColor[1], src.barColor[2], src.barColor[3] }
+        elseif k == "ctColor" and src.ctColor then
+            copy.ctColor = { src.ctColor[1], src.ctColor[2], src.ctColor[3] }
+        elseif k == "ctBg" and src.ctBg then
+            copy.ctBg = { src.ctBg[1], src.ctBg[2], src.ctBg[3] }
         elseif k == "specs" and src.specs then
             copy.specs = {}
             for id, on in pairs(src.specs) do copy.specs[id] = on end
@@ -196,12 +235,22 @@ local function CopyConfig(src)
     return copy
 end
 
+-- Every saved aura has an id of its own that survives renaming: other auras link to it ("Timer of ...").
+local uidCount = 0
+local function NewUid()
+    uidCount = uidCount + 1
+    return string.format("%x%x%x", time(), math.random(0, 0xfffff), uidCount)
+end
+
 local function FillDefaults(cfg)
     local d = NewConfig()
+    -- (a counter that is a bar had a dark box before the background could be chosen)
+    if cfg.ctBgAlpha == nil and cfg.kind == "counter" and cfg.shape == "bar" then cfg.ctBgAlpha = 80 end
     for _, k in ipairs(KEYS) do
         -- (specs stays nil for older auras: they belong to every specialization)
         if cfg[k] == nil and k ~= "spellID" and k ~= "pos" and k ~= "specs" then cfg[k] = d[k] end
     end
+    if cfg.ctNum == "off" then cfg.ctNum = "right" end   -- (a counter always writes its number)
 end
 
 local function MakeStepCurve(threshold, belowValue, aboveValue)
@@ -233,7 +282,9 @@ end
 -- A point (x, v) means "value v from x up to the next point".
 --   "<" : below pct        ">" : above pct        "=" : rounds to pct (pct +/- 0.5%)
 --   "<=" : below or equal  ">=" : above or equal
-local function MakeHealthCurve(op, pct)
+local function MakeHealthCurve(op, pct, invert)
+    local inside, outside = 1, 0
+    if invert then inside, outside = 0, 1 end   -- the opposite: 1 where the comparison does NOT hold
     local lo, hi
     if op == ">" then
         lo, hi = pct + 0.0001, 2
@@ -249,12 +300,12 @@ local function MakeHealthCurve(op, pct)
     local c = C_CurveUtil.CreateCurve()
     c:SetType(Enum.LuaCurveType.Step)
     if lo <= 0 then
-        c:AddPoint(0, 1)
+        c:AddPoint(0, inside)
     else
-        c:AddPoint(0, 0)
-        if lo <= 1 then c:AddPoint(lo, 1) end
+        c:AddPoint(0, outside)
+        if lo <= 1 then c:AddPoint(lo, inside) end
     end
-    if lo <= 1 and hi <= 1 then c:AddPoint(hi, 0) end
+    if lo <= 1 and hi <= 1 then c:AddPoint(hi, outside) end
     return c
 end
 
@@ -946,7 +997,16 @@ local function CreateIndicator()
     local S = CreateFrame("Frame", nil, P)
     S:SetAllPoints(A)
 
-    local B = CreateFrame("Frame", nil, S)
+    -- K1..K3: "not while another aura shows" (up to three auras), children of S, parents of B
+    local K1 = CreateFrame("Frame", nil, S)
+    K1:SetAllPoints(A)
+    local K2 = CreateFrame("Frame", nil, K1)
+    K2:SetAllPoints(A)
+    local K3 = CreateFrame("Frame", nil, K2)
+    K3:SetAllPoints(A)
+    ind.K = { K1, K2, K3 }
+
+    local B = CreateFrame("Frame", nil, K3)
     B:SetAllPoints(A)
 
     -- I: holds the icon picture and its cooldown swipe, so the "pulse" effect can scale
@@ -1017,6 +1077,75 @@ local function CreateIndicator()
         MakeExtraFace(R),
     }
 
+    -- BAR: a progress bar that empties while our own timer runs (shape "bar"), part of B like the icon
+    local BAR = CreateFrame("Frame", nil, B)
+    BAR:SetAllPoints(B)
+    BAR:Hide()
+    BAR.track = CreateFrame("Frame", nil, BAR)
+    BAR.track.bg = BAR.track:CreateTexture(nil, "BACKGROUND")
+    BAR.track.bg:SetAllPoints()
+    BAR.track.bg:SetColorTexture(0.05, 0.055, 0.075, 0.85)
+    BAR.fill = BAR.track:CreateTexture(nil, "ARTWORK")
+    BAR.fill:SetColorTexture(1, 0.56, 0.12, 1)
+    BAR.time = BAR.track:CreateFontString(nil, "OVERLAY")
+    BAR.time:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+    BAR.icon = BAR:CreateTexture(nil, "ARTWORK")
+    BAR.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    ind.bar = BAR
+    BAR:SetScript("OnUpdate", function(self)
+        local cfg = ind.cfg
+        if not cfg or cfg.shape ~= "bar" or cfg.kind == "counter" then return end
+        local total = math.max(cfg.suppressSeconds or 10, 1)
+        local fraction
+        if ind.editing or ind.preview or ind.dragging then
+            fraction = 1 - ((GetTime() % 4) / 4)   -- a sample that loops, to judge the direction and the look
+        else
+            local left = ind.suppressUntil and (ind.suppressUntil - GetTime()) or 0
+            fraction = left > 0 and math.min(left / total, 1) or 0
+            if fraction == 0 and cfg.trackShow ~= "while" then fraction = 1 end   -- shown when it is gone: a full bar
+        end
+        -- the seconds left, written on the bar (whole seconds)
+        local shown = ""
+        if cfg.barTimeOn ~= false and cfg.barTime ~= "none" and fraction > 0.001 then shown = tostring(math.ceil(fraction * total - 0.001)) end
+        if shown ~= self.timeShown then
+            self.timeShown = shown
+            self.time:SetText(shown)
+        end
+        if fraction <= 0.001 then
+            self.fill:Hide()
+        else
+            self.fill:SetWidth(math.max(1, (self.trackWidth or 1) * fraction))
+            self.fill:Show()
+        end
+    end)
+
+    -- COUNTER: three pieces of text (left, centre, right) with no frame and no background; they hold the item's picture, name
+    -- and number (HeadsUp_UpdateCounter). Part of B like the icon.
+    local CT = CreateFrame("Frame", nil, B)
+    CT:SetAllPoints(B)
+    CT:Hide()
+    CT.panel = CT:CreateTexture(nil, "BACKGROUND")   -- the dark box of a counter that is a bar
+    CT.panel:SetAllPoints()
+    CT.panel:SetColorTexture(0.05, 0.055, 0.075, 0.85)
+    CT.panel:Hide()
+    CT.bg = CT:CreateTexture(nil, "BACKGROUND", nil, 1)   -- a faint box, only while the aura is placed, to show where it is
+    CT.bg:SetAllPoints()
+    CT.bg:SetColorTexture(1, 1, 1, 0.12)
+    CT.bg:Hide()
+    CT.icon = CT:CreateTexture(nil, "ARTWORK")   -- the picture at one end of a counter that is a bar (as high as the bar)
+    CT.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    CT.icon:Hide()
+    -- the name and the number: two pieces of text, placed by HeadsUp_UpdateCounter so that they never overlap
+    CT.slot = {}
+    for _, key in ipairs({ "name", "num" }) do
+        local fs = CT:CreateFontString(nil, "OVERLAY")
+        fs:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+        fs:SetWordWrap(false)
+        fs:SetMaxLines(1)
+        CT.slot[key] = fs
+    end
+    ind.CT = CT
+
     local hint = B:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     hint:SetPoint("TOP", B, "BOTTOM", 0, -2)
     hint:SetJustifyH("CENTER")
@@ -1027,17 +1156,37 @@ local function CreateIndicator()
     ind.I = I   -- the icon's own frame: its effective alpha tells whether the icon is visible
     ind.G, ind.H, ind.J = G, H, J
     ind.M, ind.P, ind.S = M, P, S
-    ind.parts = { A, C, E, F, G, H, J, M, P, S, B, I, cd, R, ind.faces[2].B, ind.faces[2].I, ind.faces[2].cd,
+    ind.parts = { A, C, E, F, G, H, J, M, P, S, K1, K2, K3, B, I, cd, R, ind.faces[2].B, ind.faces[2].I, ind.faces[2].cd,
         ind.faces[1].fx, ind.faces[2].fx, ind.faces[1].fx.top, ind.faces[2].fx.top,
-        ind.faces[1].RIM, ind.faces[2].RIM }   -- every frame of the indicator (for the layer setting)
+        ind.faces[1].RIM, ind.faces[2].RIM, BAR, BAR.track, CT }   -- every frame of the indicator (for the layer setting)
 
     A:SetScript("OnDragStart", function(self)
         if not (ind.editing or ind.preview) then return end
         ind.dragging = true
+        -- a group of auras moves as one: the others follow the one that is dragged (same distance, same direction)
+        if ind.groupMove then
+            local startX, startY = self:GetCenter()
+            local others = {}
+            for _, other in ipairs(ind.groupMove) do
+                if other ~= ind then
+                    local ox, oy = other.A:GetCenter()
+                    if ox then others[#others + 1] = { other, ox, oy } end
+                end
+            end
+            self:SetScript("OnUpdate", function(frame)
+                local cx, cy = frame:GetCenter()
+                if not (cx and startX) then return end
+                for _, o in ipairs(others) do
+                    o[1].A:ClearAllPoints()
+                    o[1].A:SetPoint("CENTER", UIParent, "BOTTOMLEFT", o[2] + cx - startX, o[3] + cy - startY)
+                end
+            end)
+        end
         self:StartMoving()
     end)
     A:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
+        self:SetScript("OnUpdate", nil)
         ind.dragging = false
         if ind.cfg then
             -- saved as the distance of the icon's centre from the centre of the screen (X right, Y up)
@@ -1050,6 +1199,22 @@ local function CreateIndicator()
                 ind.cfg.pos = { point, relPoint, x, y }
             end
             if HeadsUp_PositionChanged then HeadsUp_PositionChanged() end   -- the window shows the new X and Y
+        end
+        -- the others of a group stop where they were carried: their new places are saved too
+        if ind.groupMove then
+            local ux, uy = UIParent:GetCenter()
+            for _, other in ipairs(ind.groupMove) do
+                if other ~= ind and other.cfg and ux then
+                    local cx, cy = other.A:GetCenter()
+                    if cx then
+                        local x, y = math.floor(cx - ux + 0.5), math.floor(cy - uy + 0.5)
+                        other.cfg.pos = { "CENTER", "CENTER", x, y }
+                        other.A:ClearAllPoints()
+                        other.A:SetPoint("CENTER", UIParent, "CENTER", x, y)
+                    end
+                end
+            end
+            if HeadsUp_GroupCommit then HeadsUp_GroupCommit() end   -- a dragged place is kept
         end
         RefreshMouse(ind)
         Update(ind)
@@ -1074,7 +1239,7 @@ end
 
 local function UpdateCooldown(ind)
     local cfg = ind.cfg
-    if not cfg or not cfg.spellID then return end
+    if not cfg or not cfg.spellID or cfg.kind == "counter" then return end
     local duration = C_Spell.GetSpellCooldownDuration(cfg.spellID)
     if duration then
         for _, face in ipairs(ind.faces) do
@@ -1145,7 +1310,68 @@ local function TargetKinds()
     return { normal = true }
 end
 
+-- A debuff tracker lets its aura (the one it was made from) know when the effect has ended: while the
+-- timer of such a tracker runs, the aura waits. It is our own clock, so it can be read in combat.
+local function CueWaiting(cfg)
+    if not cfg.uid then return false end
+    for _, ind in pairs(pool) do
+        local c = ind.cfg
+        if c and c.trackerOf == cfg.uid and c.trackerCue and not c.hidden and c.suppressEnabled
+            and ind.suppressUntil and GetTime() < ind.suppressUntil then
+            return true
+        end
+    end
+    return false
+end
+
+local function HasCue(cfg)
+    if not cfg.uid then return false end
+    for _, ind in pairs(pool) do
+        local c = ind.cfg
+        if c and c.trackerOf == cfg.uid and c.trackerCue then return true end
+    end
+    return false
+end
+
+-- How many enemies are around? Counted from the nameplates of the enemies, a few times a second (RefreshCrowd).
+-- The test of 22 Oct 2026 (HeadsUpDB.crowdProbe) found it all readable in the open world. Where the game hides it
+-- (dungeons, probably) crowd.ok stays false and the condition is ignored.
+local crowd = { ok = false, fighting = 0, onMe = 0 }
+
+local function RefreshCrowd()
+    crowd.ok, crowd.fighting, crowd.onMe, crowd.why = false, 0, 0, ""
+    if not (C_NamePlate and C_NamePlate.GetNamePlates) then crowd.why = "no nameplate api" return end
+    local okP, plates = pcall(C_NamePlate.GetNamePlates)
+    if not okP or type(plates) ~= "table" then crowd.why = "nameplates not readable" return end
+    local fighting, onMe, known = 0, 0, 0
+    for _, plate in ipairs(plates) do
+        -- the unit of the nameplate: its token, or what the frame says (the same ways the test of 22 Oct 2026 used)
+        local okU, unit = pcall(function()
+            return plate.namePlateUnitToken or (plate.GetUnit and plate:GetUnit()) or (plate.UnitFrame and plate.UnitFrame.unit)
+        end)
+        if okU and unit ~= nil then
+            if issecretvalue(unit) then crowd.why = "unit token hidden" return end
+            known = known + 1
+            local okA, canAttack = pcall(UnitCanAttack, "player", unit)
+            if not okA or issecretvalue(canAttack) then crowd.why = "attackable hidden" return end
+            if canAttack then
+                local okD, dead = pcall(UnitIsDead, unit)
+                if not (okD and not issecretvalue(dead) and dead) then
+                    local okC, fightingNow = pcall(UnitAffectingCombat, unit)
+                    if not okC or issecretvalue(fightingNow) then crowd.why = "combat state hidden" return end
+                    if fightingNow then fighting = fighting + 1 end
+                    local okT, threat = pcall(UnitThreatSituation, "player", unit)
+                    if okT and not issecretvalue(threat) and threat and threat >= 2 then onMe = onMe + 1 end
+                end
+            end
+        end
+    end
+    if #plates > 0 and known == 0 then crowd.why = "no unit on the nameplates" return end
+    crowd.ok, crowd.fighting, crowd.onMe, crowd.why = true, fighting, onMe, "ok"
+end
+
 local function ReadableConditionsMet(cfg, lingering)
+    if CueWaiting(cfg) then return false end
     if cfg.formEnabled then
         local form = GetShapeshiftForm() or 0
         local spell = 0
@@ -1156,14 +1382,25 @@ local function ReadableConditionsMet(cfg, lingering)
         if spell ~= (cfg.formSpell or 0) then return false end
     end
     if lingering then return true end
+    -- how many enemies are around (needs no target)
+    if cfg.crowdEnabled and crowd.ok then
+        local n = (cfg.crowdMetric == "me") and crowd.onMe or crowd.fighting
+        local met = Compare(n, cfg.crowdOp or ">=", cfg.crowdN or 2)
+        if not met then return false end
+    end
     if not (cfg.enemyAliveEnabled or cfg.tgtHostileEnabled or cfg.tgtTypeEnabled
         or cfg.tgtClassEnabled or cfg.threatEnabled) then
         return true
     end
     if not UnitExists("target") then return false end
     if cfg.tgtHostileEnabled then
-        local hostile = UnitCanAttack("player", "target") and true or false
-        if hostile ~= (cfg.tgtHostile ~= "friend") then return false end
+        -- hostility: friend (cannot be attacked), neutral (can be attacked, reaction 4), enemy (the others)
+        local kind = "friend"
+        if UnitCanAttack("player", "target") then
+            local okR, reaction = pcall(UnitReaction, "player", "target")
+            kind = (okR and not issecretvalue(reaction) and reaction == 4) and "neutral" or "enemy"
+        end
+        if kind ~= (cfg.tgtHostile or "enemy") then return false end
     end
     if cfg.tgtTypeEnabled then
         local ok, isPlayer = pcall(UnitIsPlayer, "target")
@@ -1220,16 +1457,12 @@ end
 -- tell whether there is enough resource to use it. With a cooldown it cannot be known.)
 local function HasHiddenCondition(cfg, ind)
     return cfg.healthEnabled or cfg.enemyEnabled or cfg.powerEnabled or cfg.cdEnabled or cfg.chargesEnabled
-        or (cfg.availEnabled and ind.hasCooldown ~= false)
+        or (cfg.availEnabled and ind.hasCooldown ~= false) or (cfg.otherAuras and cfg.otherAuras[1])
 end
 
 -- true: the aura shows now. false: it does not. nil: it cannot be known (no sound).
 local function SoundConditionsMet(cfg, ind)
     local overrides = cfg.buffEnabled and cfg.buffAlways and cfg.buffState ~= "gone"
-    local hidden = HasHiddenCondition(cfg, ind)
-    if hidden and not overrides then return nil end
-    if not ShowRulesAllow(cfg, ind) then return false end
-    if cfg.suppressEnabled and ind.suppressUntil and GetTime() < ind.suppressUntil then return false end
     local lit = false
     if cfg.buffEnabled then
         local okL, isLit = pcall(function()
@@ -1237,19 +1470,29 @@ local function SoundConditionsMet(cfg, ind)
         end)
         lit = okL and isLit
     end
-    if overrides then
-        if lit then return true end     -- the second icon shows, whatever the other conditions say
-        if hidden then return false end -- the other way to show needs conditions that cannot be read
-    elseif cfg.buffEnabled and lit ~= (cfg.buffState ~= "gone") then
-        return false
+    -- "Ignore the resources": while it is lit the resource conditions do not count (the others do)
+    local free = overrides and lit
+    local hidden
+    if free then
+        hidden = cfg.healthEnabled or cfg.enemyEnabled or cfg.cdEnabled or cfg.chargesEnabled
+            or (cfg.availEnabled and ind.hasCooldown ~= false)
+    else
+        hidden = HasHiddenCondition(cfg, ind)
     end
-    if cfg.availEnabled then   -- (only here when the ability has no cooldown): enough resource to use it?
+    if hidden then return nil end
+    if not ShowRulesAllow(cfg, ind) then return false end
+    if cfg.suppressEnabled then
+        local running = ind.suppressUntil and GetTime() < ind.suppressUntil and true or false
+        if running == (cfg.trackShow ~= "while") then return false end
+    end
+    if cfg.buffEnabled and not overrides and lit ~= (cfg.buffState ~= "gone") then return false end
+    if cfg.availEnabled and not free then   -- (only here when the ability has no cooldown): enough resource to use it?
         local okU, usable = pcall(C_Spell.IsSpellUsable, cfg.spellID)
         if not okU or issecretvalue(usable) or not usable then return false end
     end
     local lingering = cfg.lingerEnabled and not inCombat and ind.lingerUntil and GetTime() < ind.lingerUntil
     if not ReadableConditionsMet(cfg, lingering) then return false end
-    if cfg.secEnabled and ind.secType then
+    if cfg.secEnabled and ind.secType and not free then
         local count = SecondaryCount(ind.secType)
         if count == nil or not Compare(count, cfg.secOp, cfg.secValue or 1) then return false end
     end
@@ -1294,13 +1537,150 @@ local function ResetFx(ind)
     ind.faces[2].fxOn = false
 end
 
+---------------------------------------------------------------------------
+-- "Only if aura X is active / not active" (otherAuras = { { uid, state = "active" | "inactive" }, ... }, up to three)
+--
+-- Whether another aura X shows is not readable in combat (its icon depends on hidden values). But X shows when ALL of its
+-- conditions hold. The readable conditions of X are checked directly. Each hidden condition of X is wired to a frame
+-- (K1..K3, between the chain and the icon):
+--   "active":     X's hidden conditions are multiplied into the chain (one frame each), so this aura shows only if all hold;
+--   "not active": the OPPOSITE of X's single hidden condition (X does not show when ANY of its conditions fails). With
+--                 several hidden conditions it would need an "or" of frames: not supported yet.
+-- The three frames are shared by all the rows; a row that does not fit is ignored (the settings window says so).
+---------------------------------------------------------------------------
+local function FindIndicatorByUid(uid)
+    for _, ind in pairs(pool) do
+        local c = ind.cfg
+        if c and c.uid == uid then return ind end
+    end
+    return nil
+end
+
+local function IsLingering(c, x)
+    return (c.lingerEnabled and not inCombat and x.lingerUntil and GetTime() < x.lingerUntil) and true or false
+end
+
+-- Do all the READABLE conditions of the aura x hold right now? (false: it does not show, whatever the hidden ones say)
+local function ReadablePartMet(c, x)
+    if not c.spellID or c.class ~= playerClass or c.hidden then return false end
+    if c.specs and not c.specs[currentSpec] then return false end
+    if not ShowRulesAllow(c, x) then return false end
+    if c.suppressEnabled then
+        local running = x.suppressUntil and GetTime() < x.suppressUntil and true or false
+        if running == (c.trackShow ~= "while") then return false end
+    end
+    local lingering = IsLingering(c, x)
+    if c.buffEnabled then
+        local ok, lit = pcall(function() return C_SpellActivationOverlay.IsSpellOverlayed(c.spellID) and true or false end)
+        if ((ok and lit) and true or false) ~= (c.buffState ~= "gone") then return false end
+    end
+    if not ReadableConditionsMet(c, lingering) then return false end
+    if c.enemyEnabled and not lingering then
+        if not (UnitExists("target") and UnitCanAttack("player", "target")) then return false end
+    end
+    if c.secEnabled and x.secType then
+        local count = SecondaryCount(x.secType)
+        if not (count ~= nil and Compare(count, c.secOp, c.secValue or 1)) then return false end
+    end
+    if c.availEnabled and x.hasCooldown == false then   -- (no cooldown of its own: "usable" tells about the resource)
+        local ok, usable = pcall(C_Spell.IsSpellUsable, c.spellID)
+        if not ok or issecretvalue(usable) or not usable then return false end
+    end
+    return true
+end
+
+-- the hidden (secret) conditions of the aura x, as a list of names
+local function SecretFactors(c, x)
+    local list = {}
+    if c.healthEnabled then list[#list + 1] = "health" end
+    if c.enemyEnabled and not IsLingering(c, x) then list[#list + 1] = "enemy" end
+    if c.cdEnabled and x.cdDuration then list[#list + 1] = "cd" end
+    if c.chargesEnabled and (x.chargeDuration or x.cdDuration) then list[#list + 1] = "charges" end
+    if c.powerEnabled and x.primaryType and x.primaryCurve then list[#list + 1] = "power" end
+    if c.availEnabled and x.hasCooldown ~= false then   -- the cost and the cooldown
+        if x.powerType then list[#list + 1] = "cost" end
+        if x.cdDuration then list[#list + 1] = "available" end
+    end
+    return list
+end
+
+-- How many frames the row needs, or nil when it is not supported.
+local function CrossNeeds(c, x, state)
+    if c.buffAlways and c.buffEnabled and c.buffState ~= "gone" then return nil end
+    local n = #SecretFactors(c, x)
+    if state == "active" then return math.max(1, n) end
+    if n > 1 then return nil end
+    return 1
+end
+
+-- The settings window asks: how many of the three frames does a row for this aura need? nil = not supported
+function HeadsUp_CrossNeeds(uid, state)
+    local x = FindIndicatorByUid(uid)
+    if not x or not x.cfg then return 0 end
+    return CrossNeeds(x.cfg, x, state == "active" and "active" or "inactive")
+end
+
+-- the alpha of one hidden condition of X: 1 where it holds (positive) or where it does NOT hold (inverse)
+local function FactorAlpha(name, x, inverse)
+    local c = x.cfg
+    if name == "health" then
+        return UnitHealthPercent("player", true, inverse and x.healthInvCurve or x.healthCurve)
+    elseif name == "enemy" then
+        return UnitHealthPercent("target", true, inverse and x.enemyInvCurve or x.enemyCurve)
+    elseif name == "power" then
+        return UnitPowerPercent("player", x.primaryType, false, inverse and x.primaryInvCurve or x.primaryCurve)
+    elseif name == "cost" then
+        return UnitPowerPercent("player", x.powerType, false, inverse and x.powerInvCurve or x.powerCurve)
+    elseif name == "cd" then
+        return x.cdDuration:EvaluateRemainingDuration(inverse and x.cdInvCurve or x.cdCurve)
+    elseif name == "available" then
+        return x.cdDuration:EvaluateRemainingDuration(inverse and x.coolCurve or x.readyCurve)
+    elseif name == "charges" then
+        local source = (c.chargesState == "full") and x.chargeDuration or x.cdDuration
+        if source then return source:EvaluateRemainingDuration(inverse and x.coolCurve or x.readyCurve) end
+    end
+    return 1
+end
+
+-- Sets the frames K[first ...] for one row; returns the next free frame.
+local function ApplyCrossRow(ind, row, first)
+    local x = FindIndicatorByUid(row.uid)
+    if not x or not x.cfg then return first end   -- (deleted: ignored)
+    local c = x.cfg
+    local state = (row.state == "active") and "active" or "inactive"
+    local needs = CrossNeeds(c, x, state)
+    if not needs or first + needs - 1 > 3 then return first end   -- not supported: ignored
+    local K = ind.K
+    local readable = ReadablePartMet(c, x)
+    local factors = SecretFactors(c, x)
+    if state == "inactive" then
+        local alpha = 1   -- (if its readable part fails it cannot show: nothing to wait for)
+        if readable then alpha = (#factors == 0) and 0 or FactorAlpha(factors[1], x, true) end
+        K[first]:SetAlpha(alpha)
+    else
+        for j = 1, needs do K[first + j - 1]:SetAlpha(1) end
+        if not readable then
+            K[first]:SetAlpha(0)   -- it cannot show now: "active" is not met
+        else
+            for j, name in ipairs(factors) do K[first + j - 1]:SetAlpha(FactorAlpha(name, x, false)) end
+        end
+    end
+    return first + needs
+end
+
 local function UpdateVisual(ind)
     local cfg = ind.cfg
     local A, C, E, F, G, H, J = ind.A, ind.C, ind.E, ind.F, ind.G, ind.H, ind.J
     local M, P, S = ind.M, ind.P, ind.S
-    if not cfg or not cfg.spellID or cfg.class ~= playerClass
-        or (cfg.hidden and not ind.editing and not ind.preview)
-        or (cfg.specs and not cfg.specs[currentSpec] and not ind.editing and not ind.preview) then
+    local placingNow = ind.editing or ind.preview
+    local notForMe
+    if cfg and cfg.kind == "counter" then
+        notForMe = not HeadsUp_CounterAllowed(cfg, placingNow)   -- (a counter may be for every character, or by profession)
+    else
+        notForMe = cfg and (cfg.class ~= playerClass or (cfg.specs and not cfg.specs[currentSpec] and not placingNow))
+    end
+    if not cfg or not cfg.spellID or notForMe
+        or (cfg.hidden and not ind.editing and not ind.preview) then
         A:Hide()
         ind.R:Hide()
         ResetFx(ind)
@@ -1308,6 +1688,7 @@ local function UpdateVisual(ind)
     end
     A:Show()
     ind.R:Show()
+    if cfg.kind == "counter" then HeadsUp_UpdateCounter(ind) end
     local placing = ind.editing or ind.preview or ind.dragging
     ind.hint:SetShown(placing)
     if placing then
@@ -1324,9 +1705,20 @@ local function UpdateVisual(ind)
         M:SetAlpha(1)
         P:SetAlpha(1)
         S:SetAlpha(1)
+        for _, k in ipairs(ind.K) do k:SetAlpha(1) end
         ind.R:SetAlpha(0)   -- the second path stays off while placing: one icon only
         -- show the chosen Empowered effect while editing, so it can be judged
-        SetFx(ind.faces[1], cfg.buffEnabled and cfg.buffState ~= "gone" and true or false)
+        if ind.plain then
+            -- placing a group: clean icons, no effects (ApplyConfig brings them back afterwards)
+            SetFx(ind.faces[1], false)
+            for _, face in ipairs(ind.faces) do
+                face.glow:Hide()
+                face.pulse:Stop()
+                face.iconPulse:Stop()
+            end
+        else
+            SetFx(ind.faces[1], cfg.buffEnabled and cfg.buffState ~= "gone" and true or false)
+        end
         SetFx(ind.faces[2], false)
         return
     end
@@ -1339,18 +1731,31 @@ local function UpdateVisual(ind)
         return
     end
     -- "after casting, hide for N seconds": our own clock, no secret value involved
-    if cfg.suppressEnabled and ind.suppressUntil and GetTime() < ind.suppressUntil then
-        A:SetAlpha(0)
-        ResetFx(ind)
-        return
+    if cfg.suppressEnabled then
+        local running = ind.suppressUntil and GetTime() < ind.suppressUntil and true or false
+        -- "hide": hidden while it runs. "while": shown only while it runs (a bar that empties)
+        if running == (cfg.trackShow ~= "while") then
+            A:SetAlpha(0)
+            ResetFx(ind)
+            return
+        end
     end
     local ok, err = pcall(function()
+        -- "Ignore the resources" (Empowered + buffAlways): while the ability is lit up it costs nothing (or is stronger), so the
+        -- conditions about resources (the cost, the main resource, the second resource) do not count. Every other
+        -- condition (health, enemies, target, cooldown, charges...) still counts. The rows of "Combine with auras" (auras that compete for
+        -- the same resources) are ignored too while it is free.
+        local free = false
+        if cfg.buffEnabled and cfg.buffAlways and cfg.buffState ~= "gone" and cfg.spellID then
+            local okF, litF = pcall(function() return C_SpellActivationOverlay.IsSpellOverlayed(cfg.spellID) and true or false end)
+            free = (okF and litF) and true or false
+        end
         if cfg.healthEnabled then
             A:SetAlpha(UnitHealthPercent("player", true, ind.healthCurve))
         else
             A:SetAlpha(1)
         end
-        if cfg.availEnabled and ind.powerType then
+        if cfg.availEnabled and ind.powerType and not free then
             C:SetAlpha(UnitPowerPercent("player", ind.powerType, false, ind.powerCurve))
         else
             C:SetAlpha(1)
@@ -1407,20 +1812,11 @@ local function UpdateVisual(ind)
             end
         else
             H:SetAlpha(1)
-            SetFx(ind.faces[1], false)   -- (with "ignore", the second icon carries the effect)
+            SetFx(ind.faces[1], free)   -- (with "ignore the resources" the effect shows while it is lit)
         end
-        -- "Always show when empowered": a second icon, outside the chain of conditions above, that
-        -- shows whenever the ability is lit up (the "Show it only" rules, the specs and the
-        -- hide-timer were already checked at the top of this function and still apply)
-        if overrides and glowSpell then
-            local okR, litR = pcall(function()
-                return C_SpellActivationOverlay.IsSpellOverlayed(glowSpell) and true or false
-            end)
-            ind.R:SetAlpha((okR and litR) and 1 or 0)
-            SetFx(ind.faces[2], okR and litR and true or false)
-        else
-            SetFx(ind.faces[2], false)
-        end
+        -- (the second icon of the older "Ignore the other conditions" is not used any more)
+        ind.R:SetAlpha(0)
+        SetFx(ind.faces[2], false)
         -- "the enemy (my target) is alive / dead": needs a hostile target; none = not met
         J:SetAlpha(ReadableConditionsMet(cfg, lingering) and 1 or 0)
         -- "the ability is available": the cost part is the C frame above; here the cooldown part
@@ -1431,19 +1827,28 @@ local function UpdateVisual(ind)
             M:SetAlpha(1)
         end
         -- the main resource (runic power, mana, ...): a value wired to a display, never compared
-        if cfg.powerEnabled and ind.primaryType and ind.primaryCurve then
+        if cfg.powerEnabled and ind.primaryType and ind.primaryCurve and not free then
             P:SetAlpha(UnitPowerPercent("player", ind.primaryType, false, ind.primaryCurve))
         else
             P:SetAlpha(1)
         end
         -- the second resource (runes, holy power, ...): a plain number, so we can compare it
-        if cfg.secEnabled and ind.secType then
+        if cfg.secEnabled and ind.secType and not free then
             local count = SecondaryCount(ind.secType)
             local met = count ~= nil and Compare(count, cfg.secOp, cfg.secValue or 1)
             S:SetAlpha(met and 1 or 0)
         else
             S:SetAlpha(1)
         end
+        -- "only if another aura is active / not active": the frames K1..K3
+        -- (these rows are about auras that compete for the same resources: while the ability is free they are ignored)
+        local nextFrame = 1
+        if not free then
+            for _, row in ipairs(cfg.otherAuras or {}) do
+                nextFrame = ApplyCrossRow(ind, row, nextFrame)
+            end
+        end
+        for i = nextFrame, 3 do ind.K[i]:SetAlpha(1) end
     end)
     if not ok and not errorShown then
         errorShown = true
@@ -1474,6 +1879,205 @@ function HeadsUp_ResolveFx(cfg)
         style = SPEC_FX[spec] or "sunburst"
     end
     return style
+end
+
+-- The counter: how many of an item are in the bags (not the bank), written as text. Every reading is counted in
+-- HeadsUpDB.itemProbe (combat_readable / combat_secret ...), so the log file shows whether the game lets us read it in combat.
+-- Each piece (picture, name, number) goes where the aura says; pieces in the same place go side by side.
+function HeadsUp_UpdateCounter(ind)
+    local cfg, CT = ind.cfg, ind.CT
+    if not cfg or cfg.kind ~= "counter" or not CT then return end
+    local id = HeadsUp_SubjectID(cfg)
+    local count
+    if id then
+        local ok, n = pcall(HeadsUp_ReadCount, cfg)
+        local kind = (not ok and "error") or (n == nil and "nil") or (issecretvalue(n) and "secret") or "readable"
+        if HeadsUpDB then
+            local stats = HeadsUpDB.itemProbe or {}
+            HeadsUpDB.itemProbe = stats
+            local key = (inCombat and "combat_" or "ooc_") .. kind
+            stats[key] = (stats[key] or 0) + 1
+        end
+        if kind == "readable" then count = n end
+    end
+    local size = ind.ctSize or 12
+    local shape = ind.counterShape or "text"
+    -- the number is written as the game writes it (20,224): with a separator between the thousands
+    local number = "0"
+    if count then
+        local okF, text = pcall(BreakUpLargeNumbers, count)
+        number = okF and text or tostring(count)
+    elseif id then
+        number = "?"
+    end
+    local numFs, nameFs = CT.slot.num, CT.slot.name
+    numFs:SetText(number)
+    nameFs:SetText("")
+    CT.icon:Hide()
+    if shape ~= "bar" then
+        -- text and icon: only the number, in the middle
+        numFs:ClearAllPoints()
+        numFs:SetPoint("CENTER", CT, "CENTER", 0, 0)
+        numFs:SetJustifyH("CENTER")
+    else
+        -- A bar: the picture at one end (as high as the bar, a pixel less), then the name and the number where they are put.
+        -- Nothing may overlap: the room that is left is measured, and a name that is too long is cut short (with "...").
+        local W, height = cfg.width or 200, cfg.height or 24
+        local padLeft, padRight = 2, 2
+        local iconAt = (cfg.ctIcon == "right") and "right" or ((cfg.ctIcon ~= "off") and "left" or nil)
+        if iconAt and id then
+            local _, picture = HeadsUp_SubjectFacts(cfg)
+            if picture then
+                local px = math.max(8, height - 1)
+                CT.icon:SetTexture(picture)
+                CT.icon:SetSize(px, px)
+                CT.icon:ClearAllPoints()
+                CT.icon:SetPoint(iconAt == "left" and "LEFT" or "RIGHT", CT, iconAt == "left" and "LEFT" or "RIGHT",
+                    iconAt == "left" and 1 or -1, 0)
+                CT.icon:Show()
+                if iconAt == "left" then padLeft = px + 6 else padRight = px + 6 end
+            end
+        end
+        local gap = 6
+        local avail = W - padLeft - padRight
+        local center = padLeft + avail / 2               -- (the middle of what is left, measured from the left edge)
+        local numAt = (cfg.ctNum == "left" or cfg.ctNum == "center") and cfg.ctNum or "right"
+        local wu = numFs:GetStringWidth() or 0
+        -- where a piece of text of this width starts (measured from the left edge of the bar), for the place it is put
+        local function startOf(at, width)
+            if at == "left" then return padLeft end
+            if at == "right" then return W - padRight - width end
+            return center - width / 2
+        end
+        local nameAt = cfg.ctName
+        local wn, wnMax = 0, 0
+        if nameAt and nameAt ~= "off" then
+            -- the name that was typed for the aura (by default the real name of the item)
+            local name = cfg.name
+            if not name or name == "" then name = HeadsUp_SubjectFacts(cfg) end
+            nameFs:SetWidth(0)
+            nameFs:SetText(name or (id and ("Item " .. id)) or "Item")
+            wn = nameFs:GetStringWidth() or 0
+            -- how wide the name may be: it must stay clear of the number (and keep a gap)
+            if nameAt == numAt then
+                wnMax = avail - wu - gap
+            elseif nameAt == "left" then
+                wnMax = (numAt == "right") and (avail - wu - gap) or ((center - wu / 2) - padLeft - gap)
+            elseif nameAt == "right" then
+                wnMax = (numAt == "left") and (avail - wu - gap) or ((W - padRight) - (center + wu / 2) - gap)
+            else   -- the name is centred: it grows on both sides, so the nearer limit counts
+                if numAt == "right" then
+                    wnMax = 2 * ((W - padRight - wu - gap) - center)
+                else
+                    wnMax = 2 * (center - (padLeft + wu + gap))
+                end
+            end
+            wnMax = math.max(0, math.floor(wnMax))
+            if wnMax < wn then wn = wnMax end
+            if wn < 4 then
+                nameFs:SetText("")   -- no room at all: only the number is written
+                wn = 0
+            else
+                nameFs:SetWidth(wn)
+            end
+        end
+        -- the places: the number, and the name next to it when they share the same place
+        local numStart, nameStart
+        if wn > 0 and nameAt == numAt then
+            local total = wn + gap + wu
+            if nameAt == "left" then
+                nameStart = padLeft
+            elseif nameAt == "right" then
+                nameStart = W - padRight - total
+            else
+                nameStart = center - total / 2
+            end
+            numStart = nameStart + wn + gap
+        else
+            numStart = startOf(numAt, wu)
+            nameStart = startOf(nameAt, wn)
+        end
+        numFs:ClearAllPoints()
+        numFs:SetPoint("LEFT", CT, "LEFT", numStart, 0)
+        numFs:SetJustifyH("LEFT")
+        nameFs:ClearAllPoints()
+        nameFs:SetPoint("LEFT", CT, "LEFT", nameStart, 0)
+        nameFs:SetJustifyH("LEFT")
+    end
+    if shape == "text" then
+        -- text only: the box is as wide as the number and as high as the letters (a little more), nothing to set by hand
+        local w = math.max(8, math.ceil(numFs:GetStringWidth() or 0) + 4)
+        local h = size + 4
+        if math.abs(ind.A:GetWidth() - w) > 0.5 or math.abs(ind.A:GetHeight() - h) > 0.5 then ind.A:SetSize(w, h) end
+    end
+    -- a faint box while the aura is placed, so that letters without a frame can be found (a bar and an icon show themselves)
+    CT.bg:SetShown(shape == "text" and not ind.CT.hasBg and (ind.editing or ind.preview or ind.dragging) and true or false)
+end
+
+-- the progress bar: where the track, the fill and the small icon sit
+local function ApplyBar(ind, cfg, width, height)
+    local bar = ind.bar
+    if cfg.shape ~= "bar" or cfg.kind == "counter" then   -- (the bar of a counter is made by its own text, see HeadsUp_UpdateCounter)
+        bar:Hide()
+        return
+    end
+    bar:Show()
+    local side = (cfg.barIconOn ~= false) and cfg.barIcon or "none"
+    if side ~= "left" and side ~= "right" then side = "none" end
+    local iconW = (side == "none") and 0 or height
+    local gap = (side == "none") and 0 or 2
+    local left = (side == "left") and (iconW + gap) or 0
+    local right = (side == "right") and (iconW + gap) or 0
+    bar.track:ClearAllPoints()
+    bar.track:SetPoint("TOPLEFT", bar, "TOPLEFT", left, 0)
+    bar.track:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -right, 0)
+    bar.trackWidth = math.max(1, width - left - right - 2)
+    local color = cfg.barColor or { 1, 0.56, 0.12 }
+    bar.fill:SetColorTexture(color[1], color[2], color[3], 1)
+    -- the seconds: at the left end, in the middle or at the right end of the bar
+    bar.time:SetFont(STANDARD_TEXT_FONT, math.max(9, math.min(16, height - 8)), "OUTLINE")
+    bar.time:ClearAllPoints()
+    local timeAt = cfg.barTime or "right"
+    if timeAt == "left" then
+        bar.time:SetPoint("LEFT", bar.track, "LEFT", 4, 0)
+    elseif timeAt == "center" then
+        bar.time:SetPoint("CENTER", bar.track, "CENTER", 0, 0)
+    else
+        bar.time:SetPoint("RIGHT", bar.track, "RIGHT", -4, 0)
+    end
+    bar.timeShown = nil
+    local anchor = (cfg.barDrain == "right") and "RIGHT" or "LEFT"
+    bar.fill:ClearAllPoints()
+    bar.fill:SetPoint(anchor, bar.track, anchor, (anchor == "LEFT") and 1 or -1, 0)
+    bar.fill:SetHeight(math.max(1, height - 2))
+    bar.icon:ClearAllPoints()
+    if side == "none" then
+        bar.icon:Hide()
+    else
+        bar.icon:SetPoint(side == "left" and "LEFT" or "RIGHT", bar, side == "left" and "LEFT" or "RIGHT", 0, 0)
+        bar.icon:SetSize(iconW, height)
+        bar.icon:Show()
+    end
+end
+
+-- the name of a spell (nil if unknown)
+local function SpellNameOf(spellID)
+    local ok, info = pcall(C_Spell.GetSpellInfo, spellID)
+    return ok and info and info.name or nil
+end
+
+-- Does casting the spell with this name also start the timer of this aura? Some abilities put the same effect
+-- on the enemy as another one (Divine Toll casts Judgment): KnownDurations.lua lists them.
+local function AlsoStartedBy(cfg, castName)
+    if not castName or not cfg.spellID or not HeadsUpAlsoStartedBy then return false end
+    local byClass = HeadsUpAlsoStartedBy[playerClass]
+    local own = SpellNameOf(cfg.spellID)
+    local others = byClass and own and byClass[own]
+    if not others then return false end
+    for _, name in ipairs(others) do
+        if name == castName then return true end
+    end
+    return false
 end
 
 local function ApplyConfig(ind)
@@ -1534,37 +2138,94 @@ local function ApplyConfig(ind)
         face.GL:SetFrameStrata(EFFECT_STRATA[cfg.layer] or EFFECT_STRATA[3])
     end
     ind.effectApplied = effect
+    -- a progress bar replaces the picture; no rim, ring or pulse around it
+    local isCounter = cfg.kind == "counter"
+    -- a counter is: "text" (letters only), "icon" (the item's picture with the number on it, square or round) or "bar"
+    -- (a long box with the picture, the name and the number written in it); only an icon has the picture frame
+    local counterShape = isCounter and ((cfg.shape == "square" or cfg.shape == "round") and "icon"
+        or (cfg.shape == "bar" and "bar" or "text")) or nil
+    local isBar = cfg.shape == "bar" and not isCounter
+    for _, face in ipairs(ind.faces) do
+        face.I:SetShown(not isBar and (not isCounter or counterShape == "icon"))
+        if isBar or isCounter then
+            face.rim:Hide()
+            face.glow:Hide()
+            face.pulse:Stop()
+            face.iconPulse:Stop()
+        end
+    end
+    ApplyBar(ind, cfg, width, height)
+    -- a counter: the size of the letters and their colour are the chosen ones
+    ind.CT:SetShown(isCounter)
+    if isCounter then
+        local size = math.max(8, math.min(64, math.floor(cfg.ctSize or 12)))
+        ind.ctSize = size
+        ind.counterShape = counterShape
+        local color = cfg.ctColor or { 1, 1, 1 }
+        for _, fs in pairs(ind.CT.slot) do
+            fs:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+            fs:SetTextColor(color[1], color[2], color[3], 1)
+        end
+        local bg = cfg.ctBg or { 0, 0, 0 }
+        local bgAlpha = (cfg.ctBgAlpha or 20) / 100
+        ind.CT.panel:SetColorTexture(bg[1], bg[2], bg[3], bgAlpha)
+        ind.CT.panel:SetShown(counterShape ~= "icon" and bgAlpha > 0)   -- (an icon has no box behind it)
+        ind.CT.hasBg = bgAlpha > 0
+        if counterShape == "icon" then
+            -- the picture of the item, cut to fit (like an ability's picture)
+            local picture = select(2, HeadsUp_SubjectFacts(cfg)) or cfg.icon
+            local left, right, top, bottom = 0, 1, 0, 1
+            if width > height then
+                top = (1 - height / width) / 2
+                bottom = 1 - top
+            elseif height > width then
+                left = (1 - width / height) / 2
+                right = 1 - left
+            end
+            for _, face in ipairs(ind.faces) do
+                face.tex:SetTexture(picture)
+                face.tex:SetTexCoord(left, right, top, bottom)
+            end
+        end
+        HeadsUp_UpdateCounter(ind)
+    end
     -- display priority: a higher layer is drawn above the lower ones
     for _, part in ipairs(ind.parts) do part:SetFrameStrata(strata) end
     for _, face in ipairs(ind.faces) do
         face.GL:SetFrameStrata(EFFECT_STRATA[cfg.layer] or EFFECT_STRATA[3])
     end
     ind.healthCurve = MakeHealthCurve(cfg.healthOp, cfg.healthPct / 100)
+    -- the opposite curves: another aura that waits for this one not to show uses them
+    ind.healthInvCurve = MakeHealthCurve(cfg.healthOp, cfg.healthPct / 100, true)
+    ind.enemyInvCurve = MakeHealthCurve(cfg.enemyOp, cfg.enemyPct / 100, true)
+    ind.cdInvCurve = MakeCooldownCurve(cfg.cdState == "ready" and "cooling" or "ready")
+    ind.coolCurve = MakeCooldownCurve("cooling")
     ind.enemyCurve = MakeHealthCurve(cfg.enemyOp, cfg.enemyPct / 100)
     ind.cdCurve = MakeCooldownCurve(cfg.cdState)
     ind.readyCurve = MakeCooldownCurve("ready")
 
     -- the player's resources: the main one is read through a curve, the second one as a number
-    ind.primaryType, ind.primaryCurve, ind.secType = nil, nil, nil
+    ind.primaryType, ind.primaryCurve, ind.primaryInvCurve, ind.secType = nil, nil, nil, nil
     local resources = GetResources()
     if resources.primary then
         local primary = resources.primary
         local fraction = primary.percent and (cfg.powerValue / 100) or (cfg.powerValue / primary.max)
         ind.primaryType = primary.type
         ind.primaryCurve = MakeHealthCurve(cfg.powerOp, math.min(math.max(fraction, 0), 1))
+        ind.primaryInvCurve = MakeHealthCurve(cfg.powerOp, math.min(math.max(fraction, 0), 1), true)
     end
     if resources.secondary then
         ind.secType = resources.secondary.type
     end
 
-    if cfg.spellID then
+    if cfg.spellID and cfg.kind ~= "counter" then
         ind.hasCooldown = AbilityHasCooldown(cfg.spellID)   -- (false must stay false)
     else
         ind.hasCooldown = nil
     end
 
     ind.powerType = nil
-    if cfg.spellID then
+    if cfg.spellID and cfg.kind ~= "counter" then
         local picture = cfg.icon or C_Spell.GetSpellTexture(cfg.spellID)
         -- a picture that is not square is cut, not stretched: the middle of it is shown
         local left, right, top, bottom = 0, 1, 0, 1
@@ -1579,6 +2240,7 @@ local function ApplyConfig(ind)
             face.tex:SetTexture(picture)
             face.tex:SetTexCoord(left, right, top, bottom)
         end
+        ind.bar.icon:SetTexture(picture)
         for _, face in ipairs(ind.faces) do
             face.fx:Apply(fxStyle, big, width, height, round, cfg.empowerLight == "off")
             face.fx:SetRound(round)
@@ -1593,6 +2255,7 @@ local function ApplyConfig(ind)
                     if max and not issecretvalue(max) and max > 0 then
                         ind.powerType = info.type
                         ind.powerCurve = MakeStepCurve(math.min(cost / max, 1), 0, 1)
+                        ind.powerInvCurve = MakeStepCurve(math.min(cost / max, 1), 1, 0)
                         break
                     end
                 end
@@ -1620,6 +2283,179 @@ end
 ---------------------------------------------------------------------------
 
 function HeadsUp_GetAuras() return auras end
+
+-- An item from what the player typed or dragged: an item id, an item link, or a name (a name works only for an item the
+-- game already knows, like one in the bags). Returns the item id, or nil.
+function HeadsUp_ResolveItem(text)
+    text = strtrim(tostring(text or ""))
+    if text == "" then return nil end
+    local ok, id = pcall(C_Item.GetItemInfoInstant, tonumber(text) or text)
+    if ok and id then return id end
+    return nil
+end
+
+-- Who sees a counter, and who has it in the list. The character is known by its name and realm.
+function HeadsUp_CharKey()
+    return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
+end
+
+-- The professions an item belongs to, from its kind in the game (trade goods): { [skillLine] = "Name" }, or nil when
+-- the kind says nothing (then the choice "by profession" is not offered). Cloth is Tailoring, leather is Skinning or Leatherworking,
+-- ore and stone is Mining, herbs are Herbalism, fish and meat are Fishing or Cooking.
+local PROFESSION_BY_SUBCLASS = {
+    [5] = { [197] = "Tailoring" },
+    [6] = { [393] = "Skinning", [165] = "Leatherworking" },
+    [7] = { [186] = "Mining" },
+    [9] = { [182] = "Herbalism" },
+    [8] = { [356] = "Fishing", [185] = "Cooking" },
+}
+function HeadsUp_ItemProfessions(itemID)
+    if not itemID then return nil end
+    local ok, _, _, _, _, _, classID, subclassID = pcall(C_Item.GetItemInfoInstant, itemID)
+    if ok and classID == 7 then return PROFESSION_BY_SUBCLASS[subclassID] end
+    return nil
+end
+
+local function HasProfession(lines)
+    local ok, list = pcall(function() return { GetProfessions() } end)
+    if not ok then return false end
+    for i = 1, 5 do
+        local index = list[i]
+        if index then
+            local okI, _, _, _, _, _, _, skillLine = pcall(GetProfessionInfo, index)
+            if okI and skillLine and lines[skillLine] then return true end
+        end
+    end
+    return false
+end
+
+-- may this character show the counter? (placing: while it is being placed it shows for every choice but another class)
+function HeadsUp_CounterAllowed(cfg, placing)
+    local who = cfg.ctWho or "spec"
+    if who == "all" then return true end
+    if who == "char" then return cfg.ctChar == nil or cfg.ctChar == HeadsUp_CharKey() end
+    if who == "prof" then
+        local lines = HeadsUp_ItemProfessions(cfg.itemID)
+        return placing or lines == nil or HasProfession(lines)
+    end
+    return cfg.class == playerClass and (placing or not cfg.specs or cfg.specs[currentSpec] and true or false)
+end
+
+-- is the aura in the list of this character? (an ability: of its class; a counter: by who it is for)
+function HeadsUp_AuraListed(a)
+    if a.kind == "counter" then
+        local who = a.ctWho or "spec"
+        if who == "all" or who == "prof" then return true end
+        if who == "char" then return a.ctChar == nil or a.ctChar == HeadsUp_CharKey() end
+    end
+    return a.class == playerClass
+end
+
+-- What a counter counts: its id (an item or a currency), how many there are, and its name and picture.
+function HeadsUp_SubjectID(cfg)
+    if cfg.ctType == "currency" then return cfg.currencyID end
+    return cfg.itemID
+end
+
+function HeadsUp_ReadCount(cfg)
+    if cfg.ctType == "currency" then
+        local info = C_CurrencyInfo.GetCurrencyInfo(cfg.currencyID)
+        return info and info.quantity
+    end
+    -- an item: the bags, and with ctBank also the bank and the reagent bank
+    local bank = cfg.ctBank and true or false
+    return C_Item.GetItemCount(cfg.itemID, bank, false, bank, false)
+end
+
+-- name, picture (nil for what is not known yet: the name of an item arrives a moment after the first request)
+function HeadsUp_SubjectFacts(cfg)
+    if cfg.ctType == "currency" then
+        local info = cfg.currencyID and C_CurrencyInfo.GetCurrencyInfo(cfg.currencyID)
+        return info and info.name, info and info.iconFileID
+    end
+    return HeadsUp_ItemFacts(cfg.itemID)
+end
+
+-- Every currency of the character: { { id, name, icon, quantity }, ... } sorted by name. The list of the currency window has
+-- collapsed headers: they are opened for a moment and closed again, so the window looks as it did.
+function HeadsUp_ListCurrencies()
+    local out = {}
+    pcall(function()
+        local opened = {}
+        local i = 1
+        while i <= C_CurrencyInfo.GetCurrencyListSize() do
+            local info = C_CurrencyInfo.GetCurrencyListInfo(i)
+            if info and info.isHeader and not info.isHeaderExpanded then
+                C_CurrencyInfo.ExpandCurrencyList(i, true)
+                opened[info.name] = true
+            end
+            i = i + 1
+        end
+        local seen = {}
+        for j = 1, C_CurrencyInfo.GetCurrencyListSize() do
+            local info = C_CurrencyInfo.GetCurrencyListInfo(j)
+            if info and not info.isHeader then
+                local link = C_CurrencyInfo.GetCurrencyListLink(j)
+                local id = link and tonumber(link:match("currency:(%d+)"))
+                if id and not seen[id] then
+                    seen[id] = true
+                    out[#out + 1] = { id = id, name = info.name, icon = info.iconFileID, quantity = info.quantity }
+                end
+            end
+        end
+        for j = C_CurrencyInfo.GetCurrencyListSize(), 1, -1 do   -- close again what was opened (from the end: the places do not move)
+            local info = C_CurrencyInfo.GetCurrencyListInfo(j)
+            if info and info.isHeader and opened[info.name] then
+                C_CurrencyInfo.ExpandCurrencyList(j, false)
+            end
+        end
+    end)
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
+-- What the player typed, pasted (a link) or dropped: an item or a currency. Returns "item" or "currency", and the id; nil if it
+-- is not known. A name is looked for among the items the game knows, then among the currencies of the character.
+function HeadsUp_ResolveSubject(text)
+    text = strtrim(tostring(text or ""))
+    if text == "" then return nil end
+    local cid = text:match("currency:(%d+)")
+    if cid then return "currency", tonumber(cid) end
+    local iid = text:match("item:(%d+)")
+    if iid then return "item", tonumber(iid) end
+    local function currencyName(id)
+        local ok, info = pcall(C_CurrencyInfo.GetCurrencyInfo, id)
+        return ok and info and info.name and info.name ~= "" and info.name or nil
+    end
+    local n = tonumber(text)
+    if n then
+        -- (the ids of currencies are small numbers: a small id that is a currency is taken as one)
+        if n < 10000 and currencyName(n) then return "currency", n end
+        local id = HeadsUp_ResolveItem(text)
+        if id then return "item", id end
+        if currencyName(n) then return "currency", n end
+        return nil
+    end
+    local id = HeadsUp_ResolveItem(text)
+    if id then return "item", id end
+    local wanted = text:lower()
+    local partial
+    for _, c in ipairs(HeadsUp_ListCurrencies()) do
+        local name = c.name:lower()
+        if name == wanted then return "currency", c.id end
+        if not partial and name:find(wanted, 1, true) then partial = c.id end
+    end
+    if partial then return "currency", partial end
+    return nil
+end
+
+-- the name and the picture of an item: nil for what is not known yet (the name arrives a moment after the first request)
+function HeadsUp_ItemFacts(id)
+    if not id then return nil, nil end
+    local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+    if not name then C_Item.RequestLoadItemDataByID(id) end
+    return name, C_Item.GetItemIconByID(id)
+end
 
 -- Abilities seen lighting up for the current class + specialization: { [spellID] = times seen }
 function HeadsUp_GetLearned()
@@ -1711,6 +2547,17 @@ function HeadsUp_IsDirty()
                     if (a[id] and true or false) ~= (on and true or false) then return true end
                 end
             end
+        elseif k == "otherAuras" then
+            local a, b = draft.otherAuras or {}, saved.otherAuras or {}
+            if #a ~= #b then return true end
+            for i = 1, #a do
+                if a[i].uid ~= b[i].uid or a[i].state ~= b[i].state then return true end
+            end
+        elseif k == "barColor" or k == "ctColor" or k == "ctBg" then
+            local a, b = draft[k] or {}, saved[k] or {}
+            for i = 1, 3 do
+                if a[i] ~= b[i] then return true end
+            end
         elseif k == "showRules" or k == "tgtClass" then
             local a, b = draft[k] or {}, saved[k] or {}
             for rule, on in pairs(a) do
@@ -1747,10 +2594,15 @@ function HeadsUp_DebugState()
         .. " target=" .. target .. " mounted=" .. YesNo(IsMounted())
         .. " vehicle=" .. YesNo(UnitInVehicle("player") or UnitHasVehicleUI("player"))
 
+    -- the count of enemies and what the glow of each ability says (so a confusing moment can be examined)
+    out[#out + 1] = "CROWD: ok=" .. YesNo(crowd.ok) .. " (" .. tostring(crowd.why or "never read") .. ") inCombat=" .. tostring(crowd.fighting)
+        .. " attackingMe=" .. tostring(crowd.onMe)
+
     local now = GetTime()
     for i, a in ipairs(auras) do
         local ind = pool[i]
         if ind and a.class == playerClass then
+            local lit = Safe(function() return C_SpellActivationOverlay.IsSpellOverlayed(a.spellID) and "yes" or "no" end)
             local on = {}
             if a.healthEnabled then on[#on + 1] = "health" end
             if a.enemyEnabled then on[#on + 1] = "enemyHealth" end
@@ -1787,6 +2639,8 @@ function HeadsUp_DebugState()
                 .. Alpha(ind.A) .. "/" .. Alpha(ind.C) .. "/" .. Alpha(ind.E) .. "/" .. Alpha(ind.F)
                 .. "/" .. Alpha(ind.G) .. "/" .. Alpha(ind.H) .. "/" .. Alpha(ind.J)
                 .. "/" .. Alpha(ind.M) .. "/" .. Alpha(ind.P) .. "/" .. Alpha(ind.S)
+                .. " lit=" .. lit .. " secondIconAlpha=" .. Alpha(ind.R)
+                .. " crowdRule=" .. (a.crowdEnabled and ((a.crowdMetric or "combat") .. " " .. (a.crowdOp or ">=") .. " " .. tostring(a.crowdN or 2)) or "off")
                 .. " iconVisible=" .. Safe(ind.I.GetEffectiveAlpha, ind.I)
                 .. " editing=" .. YesNo(ind.editing) .. " selected=" .. YesNo(ind.preview)
         end
@@ -1816,14 +2670,29 @@ function HeadsUp_SetPreview(index, on)
     Update(ind)
 end
 
+local groupMoveId   -- the group that is shown on the screen to be moved as one (see HeadsUp_SetGroupMove)
+local groupMoveList -- the indicators of that group
+local groupAnchor = "C"   -- the dot of the box of the group that places it: TL, TR, BL, BR (corners) or C (centre)
+local groupBox      -- the box with the five dots, drawn on the screen around the group (made when needed)
+local groupSnap     -- the places the auras of the group had before a typed move (nil = nothing to put back)
+
 function HeadsUp_ClearPreviews()
     for _, ind in pairs(pool) do
+        ind.groupMove = nil
+        if ind.plain then
+            ind.plain = nil
+            if ind.cfg then ApplyConfig(ind) end   -- the effects come back
+        end
         if ind.preview then
             ind.preview = false
             RefreshMouse(ind)
             Update(ind)
         end
     end
+    HeadsUp_GroupRestore()   -- a typed move that was not kept goes back
+    groupMoveId = nil
+    groupMoveList = nil
+    if groupBox then groupBox:Hide() end
 end
 
 -- Hide / show a saved aura right away (hidden = kept, but it never appears in game).
@@ -1833,6 +2702,15 @@ function HeadsUp_SetHidden(index, hidden)
     auras[index].hidden = hidden
     if editIndex == index and draft then draft.hidden = hidden end
     ApplyConfig(GetPooled(index))
+    -- the debuff trackers of an aura go with it
+    local uid = auras[index].uid
+    for j, t in ipairs(auras) do
+        if uid and t.trackerOf == uid then
+            t.hidden = hidden
+            if editIndex == j and draft then draft.hidden = hidden end
+            ApplyConfig(GetPooled(j))
+        end
+    end
 end
 
 -- Make an exact copy of a saved aura (same settings, same place). It gets a free name ("Death Strike 2")
@@ -1841,6 +2719,7 @@ function HeadsUp_DuplicateAura(index)
     local source = auras[index]
     if not source then return nil end
     local copy = CopyConfig(source)
+    copy.uid = NewUid()   -- a copy is another aura: links must not mix them up
     copy.hidden = nil
     copy.name = UniqueName(source.name or SpellName(source.spellID) or "Aura", nil)
     auras[#auras + 1] = copy
@@ -1848,6 +2727,345 @@ function HeadsUp_DuplicateAura(index)
     ind.cfg = copy
     ApplyConfig(ind)
     return #auras
+end
+
+-- Make a "debuff tracker" of a saved aura: a new aura for the effect the ability leaves on the enemy.
+-- It copies only what is about the target and the situation (enemy, alive, health, category, "Show it only",
+-- specializations...), not what is about the ability or the player's resources. Its timer starts when the
+-- ability is cast, and it shows while the timer is NOT running (the enemy has lost the effect). The original
+-- aura waits for the effect to end (the tracker's option "trackerCue").
+-- seconds = how long the effect lasts (a suggestion from the description of the ability). Returns the new index.
+function HeadsUp_CreateTracker(index, seconds)
+    local source = auras[index]
+    if not source or source.trackerOf then return nil end
+    local t = CopyConfig(source)
+    t.uid = NewUid()
+    t.trackerOf = source.uid
+    t.hidden = nil
+        t.name = UniqueName((source.name or SpellName(source.spellID) or "Aura") .. " Tracker", nil)
+    for _, k in ipairs({ "healthEnabled", "powerEnabled", "secEnabled", "cdEnabled", "chargesEnabled",
+        "availEnabled", "buffEnabled", "buffAlways", "soundEnabled" }) do
+        t[k] = false
+    end
+    t.kind, t.trackShow = "ability", "hide"
+    if t.shape == "bar" then t.shape = "square" end
+    t.suppressEnabled = true
+    t.suppressSeconds = (source.suppressEnabled and source.suppressSeconds) or seconds or 10
+    t.suppressReset = true
+    t.trackerCue = true
+    t.effect = "none"
+    -- smaller than the original and tucked against its top right corner, so the two look like one package
+    local px, py = 0, 150
+    if source.pos and source.pos[1] == "CENTER" and source.pos[2] == "CENTER" then
+        px, py = source.pos[3], source.pos[4]
+    end
+    local sw, sh = source.width or 50, source.height or 50
+    local tw, th = math.max(16, math.floor(sw * 0.7 + 0.5)), math.max(16, math.floor(sh * 0.7 + 0.5))
+    t.width, t.height, t.sizeLinked = tw, th, (tw == th)
+    t.pos = { "CENTER", "CENTER", px + sw / 2 + tw / 2 + 4, py + sh / 2 - th / 2 }
+    auras[#auras + 1] = t
+    local ind = GetPooled(#auras)
+    ind.cfg = t
+    ApplyConfig(ind)
+    ForEachIndicator(Update)
+    return #auras
+end
+
+---------------------------------------------------------------------------
+-- Groups of auras: a group is { id, name } in HeadsUpDB.groups. An aura belongs to at most one group (its `group` field is
+-- the id of the group). A group is moved with the mouse as one, and deactivated and activated together.
+---------------------------------------------------------------------------
+local function GroupList()
+    HeadsUpDB.groups = HeadsUpDB.groups or {}
+    return HeadsUpDB.groups
+end
+
+function HeadsUp_GetGroups()
+    if not HeadsUpDB then return {} end
+    return GroupList()
+end
+
+-- a group needs at least two auras: with fewer it goes away (the aura that is left is free); an aura of a group that does not exist is free
+function HeadsUp_PruneGroups()
+    if not HeadsUpDB then return end
+    local groups = GroupList()
+    local used = {}
+    for _, a in ipairs(auras) do
+        if a.group then used[a.group] = (used[a.group] or 0) + 1 end
+    end
+    for i = #groups, 1, -1 do
+        if (used[groups[i].id] or 0) < 2 then table.remove(groups, i) end
+    end
+    local known = {}
+    for _, g in ipairs(groups) do known[g.id] = true end
+    for _, a in ipairs(auras) do
+        if a.group and not known[a.group] then a.group = nil end
+    end
+end
+
+-- the auras of the list uids are the members of the group id (the ones that were in it before and are not in the list leave)
+function HeadsUp_SetGroupMembers(id, uids)
+    local want = {}
+    for _, uid in ipairs(uids) do want[uid] = true end
+    for _, a in ipairs(auras) do
+        if a.uid and want[a.uid] then
+            a.group = id
+        elseif a.group == id then
+            a.group = nil
+        end
+    end
+    HeadsUp_PruneGroups()
+end
+
+-- put the saved aura (its position in the list) into the group id
+function HeadsUp_AddToGroup(index, id)
+    if auras[index] then auras[index].group = id end
+end
+
+function HeadsUp_CreateGroup(name, uids)
+    local id = NewUid()
+    table.insert(GroupList(), { id = id, name = name })
+    HeadsUp_SetGroupMembers(id, uids)
+    return id
+end
+
+function HeadsUp_RenameGroup(id, name)
+    for _, g in ipairs(GroupList()) do
+        if g.id == id then g.name = name end
+    end
+end
+
+-- open / close a group in the list (closed: only its header is shown)
+function HeadsUp_ToggleGroupCollapsed(id)
+    for _, g in ipairs(GroupList()) do
+        if g.id == id then g.collapsed = (not g.collapsed) or nil end
+    end
+end
+
+-- the colour of the header of a group in the list: { r, g, b } (nil = the usual one)
+function HeadsUp_SetGroupColor(id, rgb)
+    for _, g in ipairs(GroupList()) do
+        if g.id == id then g.color = rgb end
+    end
+end
+
+function HeadsUp_Ungroup(id)
+    for _, a in ipairs(auras) do
+        if a.group == id then a.group = nil end
+    end
+    HeadsUp_PruneGroups()
+end
+
+-- the positions (in the list of the saved auras) of the members of a group
+function HeadsUp_GroupMembers(id)
+    local list = {}
+    for i, a in ipairs(auras) do
+        if a.group == id then list[#list + 1] = i end
+    end
+    return list
+end
+
+-- deactivate / activate all the auras of a group
+function HeadsUp_SetGroupHidden(id, hidden)
+    for _, i in ipairs(HeadsUp_GroupMembers(id)) do
+        HeadsUp_SetHidden(i, hidden)
+    end
+end
+
+-- The box of a group on the screen: a frame around all the auras of the group, with a dot in each of the four corners, one in the
+-- middle of each of the four edges, and one in the centre. The dot that is chosen (red) is the one that places the group (HeadsUp_GroupMoveTo).
+local ANCHOR_NAMES = {
+    TL = "top left corner", TR = "top right corner", BL = "bottom left corner", BR = "bottom right corner",
+    T = "middle of the top edge", B = "middle of the bottom edge", L = "middle of the left edge", R = "middle of the right edge",
+    C = "centre",
+}
+
+-- the box around the auras of the group: left, bottom, right, top (nil if there is none)
+local function GroupRect()
+    if not groupMoveList then return nil end
+    local l, b, r, t
+    for _, ind in ipairs(groupMoveList) do
+        local fl, fb, fr, ft = ind.A:GetLeft(), ind.A:GetBottom(), ind.A:GetRight(), ind.A:GetTop()
+        if fl then
+            l = l and math.min(l, fl) or fl
+            b = b and math.min(b, fb) or fb
+            r = r and math.max(r, fr) or fr
+            t = t and math.max(t, ft) or ft
+        end
+    end
+    return l, b, r, t
+end
+
+local function EnsureGroupBox()
+    if groupBox then return groupBox end
+    local box = CreateFrame("Frame", nil, UIParent)
+    box:SetFrameStrata("FULLSCREEN")
+    box:SetFrameLevel(1)
+    box:Hide()
+    local function line(p1, p2, horizontal)
+        local t = box:CreateTexture(nil, "OVERLAY")
+        t:SetColorTexture(1, 0.82, 0, 0.9)
+        t:SetPoint(p1)
+        t:SetPoint(p2)
+        if horizontal then t:SetHeight(2) else t:SetWidth(2) end
+    end
+    line("TOPLEFT", "TOPRIGHT", true)
+    line("BOTTOMLEFT", "BOTTOMRIGHT", true)
+    line("TOPLEFT", "BOTTOMLEFT", false)
+    line("TOPRIGHT", "BOTTOMRIGHT", false)
+    box.dots = {}
+    for _, key in ipairs({ "TL", "TR", "BL", "BR", "T", "B", "L", "R", "C" }) do
+        local d = CreateFrame("Button", nil, box)
+        d:SetSize(16, 16)
+        d.key = key
+        d.back = d:CreateTexture(nil, "ARTWORK")
+        d.back:SetAllPoints()
+        d.back:SetColorTexture(0, 0, 0, 1)
+        d.tex = d:CreateTexture(nil, "OVERLAY")
+        d.tex:SetPoint("CENTER")
+        d.tex:SetSize(12, 12)
+        -- round dots (the same mask as a round icon)
+        for _, t in ipairs({ d.back, d.tex }) do
+            local mask = d:CreateMaskTexture()
+            mask:SetTexture(FX_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            mask:SetAllPoints(t)
+            t:AddMaskTexture(mask)
+        end
+        if key == "TL" then d:SetPoint("CENTER", box, "TOPLEFT")
+        elseif key == "TR" then d:SetPoint("CENTER", box, "TOPRIGHT")
+        elseif key == "BL" then d:SetPoint("CENTER", box, "BOTTOMLEFT")
+        elseif key == "BR" then d:SetPoint("CENTER", box, "BOTTOMRIGHT")
+        elseif key == "T" then d:SetPoint("CENTER", box, "TOP")
+        elseif key == "B" then d:SetPoint("CENTER", box, "BOTTOM")
+        elseif key == "L" then d:SetPoint("CENTER", box, "LEFT")
+        elseif key == "R" then d:SetPoint("CENTER", box, "RIGHT")
+        else d:SetPoint("CENTER", box, "CENTER") end
+        d:SetScript("OnClick", function(self)
+            HeadsUp_SetGroupAnchor(self.key)
+            if HeadsUp_OnGroupDotClicked then HeadsUp_OnGroupDotClicked() end   -- opens the Position window (Settings.lua)
+        end)
+        d:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine("Anchor: " .. ANCHOR_NAMES[self.key], 1, 0.82, 0)
+            GameTooltip:AddLine("Click to choose it and open the Position window, where this dot can be put at coordinates.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        d:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        box.dots[key] = d
+    end
+    box:SetScript("OnUpdate", function(self)
+        local l, b, r, t = GroupRect()
+        if not l then
+            self:Hide()
+            return
+        end
+        local pad = 8
+        self:ClearAllPoints()
+        self:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l - pad, b - pad)
+        self:SetSize(math.max(r - l + 2 * pad, 4), math.max(t - b + 2 * pad, 4))
+        for key, d in pairs(self.dots) do
+            local chosen = (key == groupAnchor)
+            if d.chosen ~= chosen then
+                d.chosen = chosen
+                if chosen then d.tex:SetColorTexture(1, 0.1, 0.1, 1) else d.tex:SetColorTexture(1, 0.82, 0, 1) end
+            end
+        end
+    end)
+    groupBox = box
+    return box
+end
+
+function HeadsUp_SetGroupAnchor(key)
+    if ANCHOR_NAMES[key] then groupAnchor = key end
+end
+
+function HeadsUp_GetGroupAnchor()
+    return groupAnchor
+end
+
+-- where the chosen dot is now: X and Y from the centre of the screen (X to the right, Y upwards); nil if no group is shown
+function HeadsUp_GroupAnchorPos()
+    local l, b, r, t = GroupRect()
+    local ux, uy = UIParent:GetCenter()
+    if not l or not ux then return nil end
+    -- the left side for TL, BL, L; the right side for TR, BR, R; the middle for T, B, C
+    local x = (groupAnchor == "TL" or groupAnchor == "BL" or groupAnchor == "L") and l
+        or ((groupAnchor == "TR" or groupAnchor == "BR" or groupAnchor == "R") and r or (l + r) / 2)
+    -- the top for TL, TR, T; the bottom for BL, BR, B; the middle for L, R, C
+    local y = (groupAnchor == "TL" or groupAnchor == "TR" or groupAnchor == "T") and t
+        or ((groupAnchor == "BL" or groupAnchor == "BR" or groupAnchor == "B") and b or (b + t) / 2)
+    return math.floor(x - ux + 0.5), math.floor(y - uy + 0.5)
+end
+
+-- put the chosen dot at X, Y (from the centre of the screen): every aura of the group moves by the same distance
+function HeadsUp_GroupMoveTo(x, y)
+    local cx, cy = HeadsUp_GroupAnchorPos()
+    local ux, uy = UIParent:GetCenter()
+    if not cx or not groupMoveList then return end
+    local dx, dy = x - cx, y - cy
+    if dx == 0 and dy == 0 then return end
+    if not groupSnap then   -- remember where they were, to put them back if the move is not kept (HeadsUp_GroupRestore)
+        groupSnap = {}
+        for _, ind in ipairs(groupMoveList) do
+            if ind.cfg and ind.cfg.pos then
+                groupSnap[ind] = { ind.cfg.pos[1], ind.cfg.pos[2], ind.cfg.pos[3], ind.cfg.pos[4] }
+            end
+        end
+    end
+    for _, ind in ipairs(groupMoveList) do
+        local fx, fy = ind.A:GetCenter()
+        if fx and ind.cfg then
+            local nx, ny = math.floor(fx - ux + 0.5) + dx, math.floor(fy - uy + 0.5) + dy
+            ind.cfg.pos = { "CENTER", "CENTER", nx, ny }
+            ind.A:ClearAllPoints()
+            ind.A:SetPoint("CENTER", UIParent, "CENTER", nx, ny)
+        end
+    end
+end
+
+-- The group id is shown on the screen (its auras are selected: HeadsUp_SetPreview), with its box and dots; dragging one of its
+-- auras moves all of them. nil ends it.
+function HeadsUp_SetGroupMove(id)
+    HeadsUp_GroupRestore()   -- a typed move that was not kept goes back
+    for _, ind in pairs(pool) do ind.groupMove = nil end
+    groupMoveId, groupMoveList = nil, nil
+    if groupBox then groupBox:Hide() end
+    if not id then return end
+    local list = {}
+    for _, i in ipairs(HeadsUp_GroupMembers(id)) do list[#list + 1] = GetPooled(i) end
+    if #list == 0 then return end
+    if #list >= 2 then
+        for _, ind in ipairs(list) do ind.groupMove = list end   -- (a group of one aura moves like any aura)
+    end
+    for _, ind in ipairs(list) do ind.plain = true end   -- clean icons, no effects, while the group is placed
+    groupMoveId, groupMoveList = id, list
+    EnsureGroupBox():Show()
+end
+
+-- the typed move is kept (Place it, Save, or a drag with the mouse)
+function HeadsUp_GroupCommit()
+    groupSnap = nil
+end
+
+-- the typed move is not kept: the auras go back to where they were
+function HeadsUp_GroupRestore()
+    if not groupSnap then return end
+    for ind, p in pairs(groupSnap) do
+        if ind.cfg then
+            ind.cfg.pos = p
+            ApplyPosition(ind)
+        end
+    end
+    groupSnap = nil
+end
+
+-- the group that is shown on the screen now (nil if none)
+function HeadsUp_GetMovingGroup()
+    return groupMoveId
+end
+
+function HeadsUp_GroupMoving(id)
+    return groupMoveId ~= nil and groupMoveId == id
 end
 
 -- Delete a saved aura. Returns true if it was the aura being edited.
@@ -1859,7 +3077,19 @@ function HeadsUp_DeleteAura(index)
     elseif editIndex and editIndex > index then
         editIndex = editIndex - 1
     end
+    local goneUid = auras[index].uid
     table.remove(auras, index)
+    local function forget(cfg)
+        if cfg and cfg.otherAuras and goneUid then
+            for i = #cfg.otherAuras, 1, -1 do
+                if cfg.otherAuras[i].uid == goneUid then table.remove(cfg.otherAuras, i) end
+            end
+            if #cfg.otherAuras == 0 then cfg.otherAuras = nil end
+        end
+    end
+    for _, a in ipairs(auras) do forget(a) end
+    forget(draft)
+    HeadsUp_PruneGroups()
     local ind = table.remove(pool, index)
     if ind then
         ind.editing = false
@@ -1932,6 +3162,7 @@ end
 function HeadsUp_Save()
     if not draft or not draft.spellID then return nil end
     draft.name = UniqueName(draft.name or SpellName(draft.spellID) or "Aura", editIndex)
+    draft.uid = draft.uid or NewUid()
     if editIndex then
         auras[editIndex] = CopyConfig(draft)
     else
@@ -1958,7 +3189,124 @@ end
 
 local driver = CreateFrame("Frame")
 
+-- The id (GUID) of the current target, or nil when there is none or it cannot be read. The test of 21 Oct 2026
+-- (HeadsUpDB.targetProbe) found it readable in combat, so it tells one enemy from another.
+local function TargetGuid()
+    if not UnitExists("target") then return nil end
+    local ok, guid = pcall(UnitGUID, "target")
+    if not ok or type(guid) ~= "string" or issecretvalue(guid) then return nil end
+    return guid
+end
+
+-- A silent test (HeadsUpDB.targetProbe, read from the log file): can the addon tell one enemy from another in
+-- combat? On every target change and every cast of the player it writes what can be read about the target
+-- (readable / secret): its id (GUID), name, level, type, and the nameplate frame it has. Nothing goes to the chat.
+local function RecordTargetProbe(event, spellID)
+    if not HeadsUpDB then return end
+    local probe = HeadsUpDB.targetProbe or {}
+    probe.samples = probe.samples or {}
+    probe.counts = probe.counts or {}
+    HeadsUpDB.targetProbe = probe
+    local where = inCombat and "combat" or "ooc"
+    local function kind(v)
+        if v == nil then return "nil" end
+        local ok, secret = pcall(issecretvalue, v)
+        return (ok and secret) and "secret" or "readable"
+    end
+    local entry = { t = date("%H:%M:%S"), event = event, combat = inCombat and true or false }
+    if spellID ~= nil and kind(spellID) == "readable" then entry.spell = spellID end
+    local exists = UnitExists("target")
+    entry.exists = exists and true or false
+    if exists then
+        local function look(name, fn)
+            local ok, v = pcall(fn, "target")
+            local k = not ok and "error" or kind(v)
+            entry[name] = k
+            local key = name .. "_" .. where .. "_" .. k
+            probe.counts[key] = (probe.counts[key] or 0) + 1
+            if ok and k == "readable" then return v end
+            return nil
+        end
+        local guid = look("guid", UnitGUID)
+        if guid then entry.guidTail = tostring(guid):sub(-12) end
+        local name = look("name", UnitName)
+        if name then entry.nameText = tostring(name) end
+        -- the distance to the target (yards, squared): a spell with travel time takes distance / speed to arrive
+        local dist = look("distSq", function(unit) return UnitDistanceSquared and UnitDistanceSquared(unit) end)
+        if dist then entry.yards = math.floor(math.sqrt(dist) + 0.5) end
+        look("level", UnitLevel)
+        look("classification", UnitClassification)
+        look("creatureType", UnitCreatureType)
+        local okP, plate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
+        entry.plate = (okP and plate) and tostring(plate):sub(-8) or (okP and "none" or "error")
+        if okP and plate and plate.GetUnit then
+            -- (the unit token of the nameplate: readable?)
+            local okU, token = pcall(function() return plate:GetUnit() end)
+            entry.plateToken = okU and kind(token) or "error"
+        end
+    end
+    table.insert(probe.samples, entry)
+    while #probe.samples > 100 do table.remove(probe.samples, 1) end
+end
+
+-- A second silent test (HeadsUpDB.crowdProbe): how many enemies are around and how many of them have aggro on the
+-- player? Every 3 seconds in combat it walks the nameplates and writes what can be read (readable / secret), with
+-- the kind of place (none = open world, party, raid, scenario...). Nothing goes to the chat.
+local function RecordCrowdProbe()
+    if not HeadsUpDB or not (C_NamePlate and C_NamePlate.GetNamePlates) then return end
+    local probe = HeadsUpDB.crowdProbe or {}
+    probe.samples = probe.samples or {}
+    probe.counts = probe.counts or {}
+    HeadsUpDB.crowdProbe = probe
+    local _, place = IsInInstance()
+    place = place or "none"
+    local entry = { t = date("%H:%M:%S"), place = place, plates = 0, hostile = 0, fighting = 0, onMe = 0 }
+    local function kind(v)
+        if v == nil then return "nil" end
+        local ok, secret = pcall(issecretvalue, v)
+        return (ok and secret) and "secret" or "readable"
+    end
+    local function count(name, k)
+        local key = name .. "_" .. place .. "_" .. k
+        probe.counts[key] = (probe.counts[key] or 0) + 1
+    end
+    local okPlates, plates = pcall(C_NamePlate.GetNamePlates)
+    if not okPlates or type(plates) ~= "table" then
+        entry.error = "GetNamePlates"
+        count("plates", "error")
+    else
+        for _, plate in ipairs(plates) do
+            local okU, unit = pcall(function() return plate.namePlateUnitToken or plate:GetUnit() end)
+            local unitKind = okU and kind(unit) or "error"
+            count("unitToken", unitKind)
+            if okU and unitKind == "readable" then
+                entry.plates = entry.plates + 1
+                local function look(name, fn)
+                    local ok, v = pcall(fn, unit)
+                    local k = not ok and "error" or kind(v)
+                    count(name, k)
+                    if ok and k == "readable" then return v end
+                    return nil
+                end
+                if look("canAttack", function(u) return UnitCanAttack("player", u) end) then
+                    entry.hostile = entry.hostile + 1
+                    if look("inCombat", UnitAffectingCombat) then entry.fighting = entry.fighting + 1 end
+                    local threat = look("threat", function(u) return UnitThreatSituation("player", u) end)
+                    if threat and threat >= 2 then entry.onMe = entry.onMe + 1 end
+                end
+            end
+        end
+    end
+    table.insert(probe.samples, entry)
+    while #probe.samples > 60 do table.remove(probe.samples, 1) end
+end
+
 local function OnEvent(_, event, arg1, arg2, arg3)
+    if event == "PLAYER_TARGET_CHANGED" then
+        pcall(RecordTargetProbe, event)
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        pcall(RecordTargetProbe, "cast", arg3)
+    end
     if event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" then
         -- Self-learning: remember which abilities light up (are "empowered"), for this class
         -- and specialization. The "Buff" condition offers exactly these.
@@ -1981,6 +3329,24 @@ local function OnEvent(_, event, arg1, arg2, arg3)
         ForEachIndicator(function(ind)
             local c = ind.cfg
             ind.lingerUntil = (c and c.lingerEnabled) and (now + (c.lingerSeconds or 5)) or nil
+            -- the journal of the targets is cleared with the fight
+            if ind.targetTimers then
+                ind.targetTimers = nil
+                if c and c.suppressEnabled and c.suppressReset then ind.suppressUntil = nil end
+            end
+        end)
+    end
+    if event == "PLAYER_TARGET_CHANGED" then
+        -- "Start over on a new target": the timer belongs to the target it was started on. Each target has its own
+        -- timer in a journal (ind.targetTimers[guid]); a new target has none, and one you hit before continues.
+        local guid = TargetGuid()
+        local now = GetTime()
+        ForEachIndicator(function(ind)
+            local c = ind.cfg
+            if c and c.suppressEnabled and c.suppressReset then
+                local expires = guid and ind.targetTimers and ind.targetTimers[guid]
+                ind.suppressUntil = (expires and expires > now) and expires or nil
+            end
         end)
     end
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
@@ -1988,13 +3354,28 @@ local function OnEvent(_, event, arg1, arg2, arg3)
         local spellID = arg3
         if spellID and not issecretvalue(spellID) then
             local now = GetTime()
+            local started = false
+            local guid = TargetGuid()
+            local castName = SpellNameOf(spellID)
             ForEachIndicator(function(ind)
                 local c = ind.cfg
-                if c and c.suppressEnabled and c.spellID == spellID then
-                    ind.suppressUntil = now + (c.suppressSeconds or 10)
-                    Update(ind)
+                if c and c.suppressEnabled and (c.spellID == spellID or AlsoStartedBy(c, castName)) then
+                    local expires = now + (c.suppressSeconds or 10)
+                    ind.suppressUntil = expires
+                    if c.suppressReset and guid then
+                        -- the journal: this target has the effect until then (old entries are dropped)
+                        local journal = ind.targetTimers or {}
+                        for id, t in pairs(journal) do
+                            if t <= now then journal[id] = nil end
+                        end
+                        journal[guid] = expires
+                        ind.targetTimers = journal
+                    end
+                    started = true
                 end
             end)
+            -- (the auras that look at a timer of another aura change too, so all are updated)
+            if started then ForEachIndicator(Update) end
         end
         return
     end
@@ -2095,10 +3476,17 @@ local function OnEvent(_, event, arg1, arg2, arg3)
                 a.tgtHostile = "enemy"
             end
             FillDefaults(a)
+            a.uid = a.uid or NewUid()
+            a.links = nil   -- (an older way to link auras: no longer used)
+            if a.kind == "buff" or a.kind == "debuff" then a.kind = "tracker" end
+            -- "None" used to be a choice of the bar's time and icon: now a tick box each
+            if a.barTime == "none" then a.barTimeOn, a.barTime = false, "right" end
+            if a.barIcon == "none" then a.barIconOn, a.barIcon = false, "left" end   -- one kind: the side comes from the ability
             local ind = GetPooled(i)
             ind.cfg = a
             ApplyConfig(ind)
         end
+        HeadsUp_PruneGroups()
         HeadsUpDB.glowChoice = true   -- the migration above is done
         return
     end
@@ -2144,6 +3532,9 @@ driver:RegisterEvent("UPDATE_SHAPESHIFT_FORM")   -- the form changed (druid...)
 driver:RegisterEvent("GROUP_ROSTER_UPDATE")      -- solo / party / raid changed
 driver:RegisterEvent("UPDATE_STEALTH")
 driver:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+driver:RegisterEvent("CURRENCY_DISPLAY_UPDATE")     -- a currency changed: the counters are written again
+driver:RegisterEvent("BAG_UPDATE_DELAYED")        -- the bags changed: the counters are written again
+driver:RegisterEvent("ITEM_DATA_LOAD_RESULT")     -- the name of an item has arrived
 driver:SetScript("OnEvent", OnEvent)
 
 -- A cooldown running out fires no event, so auras with a cooldown condition are
@@ -2192,8 +3583,15 @@ local function Probe()
 end
 
 local sinceCheck = 0
+local sinceCrowd = 0
+local sinceCrowdRead = 0
 driver:SetScript("OnUpdate", function(_, elapsed)
     if inCombat then
+        sinceCrowd = (sinceCrowd or 0) + elapsed
+        if sinceCrowd >= 3 then
+            sinceCrowd = 0
+            pcall(RecordCrowdProbe)
+        end
         sinceProbe = sinceProbe + elapsed
         if sinceProbe >= 1 then
             sinceProbe = 0
@@ -2203,12 +3601,23 @@ driver:SetScript("OnUpdate", function(_, elapsed)
     sinceCheck = sinceCheck + elapsed
     if sinceCheck < 0.1 then return end
     sinceCheck = 0
+    local needCrowd = false
+    ForEachIndicator(function(ind)
+        if ind.cfg and ind.cfg.crowdEnabled then needCrowd = true end
+    end)
+    if needCrowd then
+        sinceCrowdRead = sinceCrowdRead + 0.1
+        if sinceCrowdRead >= 0.2 then
+            sinceCrowdRead = 0
+            RefreshCrowd()
+        end
+    end
     ForEachIndicator(function(ind)
         local cfg = ind.cfg
-        if cfg and (cfg.cdEnabled or cfg.chargesEnabled or cfg.suppressEnabled or cfg.buffEnabled
+        if cfg and (cfg.kind == "counter" or cfg.cdEnabled or cfg.chargesEnabled or cfg.suppressEnabled or cfg.buffEnabled
             or cfg.lingerEnabled or cfg.availEnabled or cfg.secEnabled or cfg.soundEnabled
             or cfg.formEnabled or cfg.tgtHostileEnabled or cfg.tgtTypeEnabled or cfg.tgtClassEnabled
-            or cfg.threatEnabled or cfg.showWhenEnabled)
+            or cfg.threatEnabled or cfg.showWhenEnabled or HasCue(cfg) or (cfg.otherAuras and cfg.otherAuras[1]) or cfg.crowdEnabled)
             and ind.A:IsShown() then
             Update(ind)
         end
