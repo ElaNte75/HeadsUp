@@ -32,7 +32,7 @@ The icon shows only when **all** your conditions are true. Hover over any option
 - **Resources that match your class**: Runic Power and Runes, Mana and Holy Power, Rage, Energy, Combo Points, Soul Shards, Chi, Essence and more.
 - **Available**: the ability can be used right now (not on cooldown, and you have enough resource).
 - **Cooldown and charges**, and a **hide time** after you cast the ability.
-- **Empowered abilities**: HeadsUp Auras knows which abilities can light up (proc glows) for every class. Choose "ignore the other conditions" and the icon shows whenever the ability lights up, whatever else is true.
+- **Empowered abilities**: HeadsUp Auras knows which abilities can light up (proc glows) for every class. Choose which conditions stop counting while the ability lights up (your health, resources, target...), and the icon shows whenever it lights up.
 
 **Make it impossible to miss**
 - Three eye-catching effects for empowered abilities: **Sunburst**, **Flame** and **Burst**, plus a glow or pulse for any icon.
